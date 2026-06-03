@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS · Violation Logs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
+        body { background:#f4f7f6; min-height:100vh; padding:2rem;
+               background-image:radial-gradient(circle at top right,#eef2f3,transparent 40%),
+                                radial-gradient(circle at bottom left,#e0eafc,transparent 40%); }
+        .container { max-width:1300px; margin:0 auto; animation:fadeIn 0.8s ease-in-out; }
+        .header-content { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; }
+        .header-title { font-size:2rem; font-weight:600; color:#2c3e50; text-transform:uppercase; letter-spacing:2px; }
+        .back-btn { display:inline-block; color:#555; text-decoration:none; font-size:0.9rem; border:1px solid #ccc; padding:9px 22px; border-radius:25px; transition:0.3s; background:white; font-weight:500; }
+        .back-btn:hover { background:#f0f0f0; }
+        .split-line { width:100%; height:2px; background:linear-gradient(90deg,transparent,#007bff,#00c6ff,#007bff,transparent); animation:glowingLine 2s infinite alternate; margin-bottom:1.5rem; }
+        .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+        .stat { background:white; border-radius:12px; padding:1rem; text-align:center; box-shadow:0 2px 10px rgba(0,0,0,0.05); border:1px solid rgba(0,0,0,0.04); }
+        .stat-val { font-size:1.8rem; font-weight:700; color:#2c3e50; }
+        .stat-lbl { font-size:0.72rem; color:#6c757d; font-weight:500; margin-top:2px; }
+        .toolbar { display:flex; gap:10px; margin-bottom:1.2rem; flex-wrap:wrap; }
+        .search-input { flex:1; min-width:200px; padding:9px 14px; border:1px solid #e2e8f0; border-radius:10px; font-size:0.88rem; font-family:'Poppins',sans-serif; background:white; outline:none; }
+        .search-input:focus { border-color:#007bff; box-shadow:0 0 0 3px rgba(0,123,255,0.08); }
+        .filter-sel { padding:9px 14px; border:1px solid #e2e8f0; border-radius:10px; font-size:0.88rem; font-family:'Poppins',sans-serif; background:white; outline:none; cursor:pointer; }
+        .table-wrap { background:rgba(255,255,255,0.88); backdrop-filter:blur(12px); border:1px solid rgba(0,0,0,0.05); border-radius:14px; overflow-x:auto; box-shadow:0 8px 32px rgba(31,38,135,0.07); }
+        .table-head { padding:1.1rem 1.4rem; border-bottom:1px solid #e9ecef; display:flex; justify-content:space-between; align-items:center; }
+        .table-head-title { font-size:1rem; font-weight:600; color:#2c3e50; }
+        table { width:100%; border-collapse:collapse; }
+        th { background:rgba(0,123,255,0.05); color:#0056b3; padding:0.85rem 1rem; font-weight:600; font-size:0.82rem; letter-spacing:0.4px; border-bottom:2px solid #e9ecef; white-space:nowrap; }
+        td { padding:0.82rem 1rem; border-bottom:1px solid #f0f0f0; color:#495057; font-size:0.83rem; vertical-align:middle; }
+        tr:last-child td { border-bottom:none; }
+        tr:hover td { background:rgba(0,123,255,0.015); }
+        .badge { padding:3px 10px; border-radius:20px; font-size:0.73rem; font-weight:600; display:inline-block; white-space:nowrap; }
+        .b-phone     { background:#f3e5f5; color:#6a1b9a; }
+        .b-face      { background:#fff3e0; color:#e65100; }
+        .b-multiple  { background:#ffebee; color:#b71c1c; }
+        .b-tab       { background:#fce4ec; color:#c62828; }
+        .b-terminate { background:#880e4f; color:white; }
+        .b-devtools  { background:#e8eaf6; color:#283593; }
+        .b-other     { background:#f5f5f5; color:#555; }
+        .adm-chip { font-family:monospace; font-size:0.8rem; background:#e3f2fd; color:#1565c0; padding:2px 8px; border-radius:6px; font-weight:600; }
+        .time-text { font-family:monospace; font-size:0.78rem; color:#6c757d; white-space:nowrap; }
+        .empty-state { text-align:center; padding:4rem; color:#6c757d; }
+        @keyframes fadeIn      { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes glowingLine { from{opacity:0.6} to{opacity:1;box-shadow:0 0 12px rgba(0,198,255,0.6)} }
+        @media(max-width:768px) { .header-content{flex-direction:column;align-items:flex-start;gap:1rem} td,th{padding:0.65rem 0.7rem} }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header-content">
+        <h1 class="header-title">🔍 Violation Logs</h1>
+        <a href="/admin" class="back-btn">← Dashboard</a>
+    </div>
+    <div class="split-line"></div>
+
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-val">{{ total_violations }}</div>
+            <div class="stat-lbl">Total Entries</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" style="color:#c62828;">{{ total_violations - terminations }}</div>
+            <div class="stat-lbl">Violations</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" style="color:#880e4f;">{{ terminations }}</div>
+            <div class="stat-lbl">Terminations</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" style="color:#e65100;">{{ unique_students }}</div>
+            <div class="stat-lbl">Students Flagged</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" style="color:#1565c0;">{{ unique_exams }}</div>
+            <div class="stat-lbl">Exams Affected</div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <input class="search-input" id="searchBox" type="text"
+               placeholder="Search student name, admission no, exam, details...">
+        <select class="filter-sel" id="typeFilter" onchange="filterTable()">
+            <option value="">All Types</option>
+            <option value="phone">📱 Phone Detected</option>
+            <option value="face">👁 Face / Gaze Alert</option>
+            <option value="multiple">👥 Multiple Faces</option>
+            <option value="tab">🔄 Tab Switch</option>
+            <option value="terminate">🚫 Terminated</option>
+            <option value="devtool">🛠 DevTools</option>
+        </select>
+        <select class="filter-sel" id="examFilter" onchange="filterTable()">
+            <option value="">All Exams</option>
+            {% set seen = [] %}
+            {% for l in logs %}{% if l.exam_title not in seen %}{% set _ = seen.append(l.exam_title) %}
+            <option value="{{ l.exam_title|lower }}">{{ l.exam_title }}</option>
+            {% endif %}{% endfor %}
+        </select>
+    </div>
+
+    <div class="table-wrap">
+        <div class="table-head">
+            <div class="table-head-title">Exam Security Log</div>
+            <span style="font-size:0.8rem;color:#6c757d;" id="recordCount">{{ total_violations }} entries</span>
+        </div>
+
+        {% if logs %}
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Timestamp</th>
+                    <th>Student</th>
+                    <th>Admission No</th>
+                    <th>Exam</th>
+                    <th>Type</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody id="logBody">
+                {% for l in logs %}
+                {% set d = (l.details or '') | lower %}
+                <tr data-text="{{ l.student_name|lower }} {{ l.admission_no|lower }} {{ l.exam_title|lower }} {{ d }} {{ l.violation_type|lower }}">
+                    <td style="color:#bbb;font-size:0.78rem;">{{ loop.index }}</td>
+                    <td><span class="time-text">{{ l.created_at.strftime('%d %b %Y, %H:%M:%S') if l.created_at else '—' }}</span></td>
+                    <td style="font-weight:600;color:#2c3e50;white-space:nowrap;">{{ l.student_name }}</td>
+                    <td><span class="adm-chip">{{ l.admission_no }}</span></td>
+                    <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ l.exam_title }}">{{ l.exam_title }}</td>
+                    <td>
+                        {% if l.violation_type == 'force_terminate' %}
+                            <span class="badge b-terminate">🚫 Terminated</span>
+                        {% elif 'phone' in d or 'mobile' in d %}
+                            <span class="badge b-phone">📱 Phone</span>
+                        {% elif 'multiple' in d or 'faces' in d %}
+                            <span class="badge b-multiple">👥 Multi-Face</span>
+                        {% elif 'face not' in d or 'eyes' in d or 'looking' in d %}
+                            <span class="badge b-face">👁 Face/Gaze</span>
+                        {% elif 'tab' in d or 'switch' in d or 'minimized' in d %}
+                            <span class="badge b-tab">🔄 Tab Switch</span>
+                        {% elif 'devtool' in d or 'developer' in d %}
+                            <span class="badge b-devtools">🛠 DevTools</span>
+                        {% else %}
+                            <span class="badge b-other">⚠ {{ l.violation_type[:18] }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="max-width:280px;color:#374151;">{{ l.details or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div style="font-size:2.5rem;margin-bottom:10px;">✅</div>
+            <div style="font-weight:600;color:#2c3e50;margin-bottom:6px;">No Violations Recorded</div>
+            <p style="font-size:0.88rem;">Violations appear here when students trigger security alerts during exams.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+<script>
+    document.getElementById('searchBox').addEventListener('input', filterTable);
+
+    function filterTable() {
+        const q      = document.getElementById('searchBox').value.toLowerCase();
+        const type   = document.getElementById('typeFilter').value.toLowerCase();
+        const exam   = document.getElementById('examFilter').value.toLowerCase();
+        const rows   = document.querySelectorAll('#logBody tr');
+        let visible  = 0;
+        rows.forEach(row => {
+            const t  = row.dataset.text || '';
+            const ok = (!q || t.includes(q)) && (!type || t.includes(type)) && (!exam || t.includes(exam));
+            row.style.display = ok ? '' : 'none';
+            if (ok) visible++;
+        });
+        document.getElementById('recordCount').textContent = visible + ' entries';
+    }
+</script>
+</body>
+</html>

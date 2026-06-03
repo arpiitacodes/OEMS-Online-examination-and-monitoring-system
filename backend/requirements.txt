@@ -1,0 +1,37 @@
+# OEMS Backend — pinned to versions verified working
+# Generated from existing venv. Heavy ML libs (torch/opencv/etc) pull
+# their own deps; only direct imports are pinned here.
+
+# ── Web framework ──
+flask==3.1.3
+werkzeug==3.1.7
+flask-cors==6.0.2
+
+# ── Database ──
+mysql-connector-python==9.6.0
+
+# ── Config / env ──
+python-dotenv==1.2.2
+
+# ── PDF generation ──
+reportlab==4.4.10
+
+# ── Email validation (used by some flows) ──
+email-validator==2.3.0
+
+# ── Computer vision / proctoring ──
+opencv-contrib-python==4.13.0.92
+numpy==2.4.3
+ultralytics==8.4.26
+
+# ── Face recognition (ArcFace login via InsightFace) ──
+# The buffalo_l model pack (~280MB: detection + ArcFace recognition) auto-downloads
+# to ~/.insightface/models on first use. onnxruntime is the inference backend.
+insightface==1.0.1
+onnxruntime==1.26.0
+
+# ── AI evaluation (SBERT) ──
+sentence-transformers==5.3.0
+scikit-learn==1.8.0
+torch==2.11.0
+torchvision==0.26.0

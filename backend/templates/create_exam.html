@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS - Create Exam</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/air-datepicker@3.4.0/air-datepicker.css">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
+        body { background-color:#f4f7f6; color:#333; min-height:100vh; padding:2rem;
+               background-image:radial-gradient(circle at top right,#eef2f3,transparent 40%),
+                                radial-gradient(circle at bottom left,#e0eafc,transparent 40%); }
+        .dashboard-container { max-width:900px; margin:0 auto; animation:fadeIn 0.8s ease-in-out; }
+        .header-section { margin-bottom:3rem; }
+        .header-content { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; }
+        .header-text-group { display:flex; flex-direction:column; }
+        .header-title { font-size:2.5rem; font-weight:600; color:#2c3e50; text-transform:uppercase; letter-spacing:2px; line-height:1.2; }
+        .header-subtitle { color:#6c757d; font-size:0.95rem; margin-top:5px; }
+        .action-btns-group { display:flex; gap:15px; }
+        .nav-btn { display:inline-block; color:#555; text-decoration:none; font-size:1rem; border:1px solid #ccc; padding:10px 25px; border-radius:25px; transition:0.3s; background:white; white-space:nowrap; font-weight:500; }
+        .nav-btn:hover { background:#f0f0f0; color:#111; border-color:#aaa; }
+        .split-line { width:100%; height:2px; background:linear-gradient(90deg,transparent,#007bff,#00c6ff,#007bff,transparent); box-shadow:0 0 10px rgba(0,123,255,0.4); animation:glowingLine 2s infinite alternate; }
+        .form-card { background:rgba(255,255,255,0.85); backdrop-filter:blur(12px); border:1px solid rgba(0,0,0,0.05); border-radius:15px; padding:2.5rem; box-shadow:0 8px 32px rgba(31,38,135,0.07); }
+        .form-card-header { margin-bottom:2rem; display:flex; align-items:center; gap:15px; border-bottom:2px solid #e9ecef; padding-bottom:1rem; }
+        .form-icon { width:45px; height:45px; background:rgba(0,123,255,0.1); color:#007bff; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; }
+        .form-card-title { font-size:1.4rem; font-weight:600; color:#2c3e50; }
+        .form-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1.5rem; margin-bottom:2rem; }
+        .form-group { display:flex; flex-direction:column; gap:8px; }
+        .form-group.full-width { grid-column:span 2; }
+        .form-label { font-size:0.95rem; font-weight:500; color:#495057; }
+        .form-label span { color:#dc3545; margin-left:3px; }
+        .form-control { width:100%; padding:12px 18px; background:#f8f9fa; border:1px solid #e9ecef; border-radius:10px; font-size:1rem; color:#333; transition:0.3s; font-family:'Poppins',sans-serif; }
+        .form-control:focus { outline:none; border-color:#007bff; background:white; box-shadow:0 0 10px rgba(0,123,255,0.1); }
+        .form-control[readonly] { background:#e9ecef; color:#6c757d; cursor:not-allowed; }
+        .form-control::placeholder { color:#adb5bd; }
+        select.form-control { cursor:pointer; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 16px center; }
+        .time-preview { background:#e3f2fd; border:1px dashed #90caf9; border-radius:10px; padding:12px 16px; margin-top:8px; font-size:0.9rem; color:#1976d2; display:flex; align-items:center; justify-content:space-between; }
+        .time-preview-label { font-weight:500; font-size:0.85rem; }
+        .time-preview-value { font-weight:600; font-family:'Consolas',monospace; color:#0d47a1; }
+        .info-card { background:#f8f9fa; border-left:4px solid #6c757d; border-radius:10px; padding:1.2rem 1.5rem; margin-bottom:2rem; display:flex; gap:15px; align-items:center; }
+        .info-icon-box { font-size:1.2rem; color:#6c757d; }
+        .info-text { color:#495057; font-size:0.9rem; line-height:1.5; }
+        .form-actions { display:flex; gap:15px; align-items:center; }
+        .btn-submit { background:linear-gradient(45deg,#007bff,#00c6ff); color:white; border:none; padding:12px 30px; border-radius:25px; font-size:1rem; font-weight:500; cursor:pointer; transition:0.3s; flex:1; display:flex; justify-content:center; box-shadow:0 4px 15px rgba(0,123,255,0.2); }
+        .btn-submit:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,123,255,0.4); }
+        .btn-cancel { background:white; color:#6c757d; border:1px solid #ced4da; padding:12px 30px; border-radius:25px; font-size:1rem; font-weight:500; text-decoration:none; transition:0.3s; text-align:center; }
+        .btn-cancel:hover { background:#f8f9fa; color:#dc3545; border-color:#dc3545; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes glowingLine { from{opacity:0.6} to{opacity:1;box-shadow:0 0 12px rgba(0,198,255,0.6)} }
+        @media(max-width:768px) {
+            .header-content{flex-direction:column;align-items:flex-start;gap:1.5rem}
+            .header-title{font-size:1.8rem}
+            .form-grid{grid-template-columns:1fr}
+            .form-group.full-width{grid-column:span 1}
+            .form-card{padding:1.5rem}
+            .form-actions{flex-direction:column}
+            .btn-submit,.btn-cancel{width:100%}
+        }
+        .air-datepicker { --adp-font-family:'Poppins',sans-serif; --adp-accent-color:#007bff; --adp-border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+    <div class="header-section">
+        <div class="header-content">
+            <div class="header-text-group">
+                <h1 class="header-title">Create Exam</h1>
+                <p class="header-subtitle">Configure examination parameters and schedules</p>
+            </div>
+            <div class="action-btns-group">
+                <a href="/admin" class="nav-btn">← Dashboard</a>
+            </div>
+        </div>
+        <div class="split-line"></div>
+    </div>
+
+    <div class="form-card">
+        <div class="form-card-header">
+            <div class="form-icon">📝</div>
+            <div class="form-card-title">Exam Details</div>
+        </div>
+
+        <form method="POST">
+            <div class="form-grid">
+
+                <div class="form-group full-width">
+                    <label class="form-label">Exam Title <span>*</span></label>
+                    <input type="text" name="title" class="form-control" placeholder="E.g., Python Programming Mid-Term" required>
+                </div>
+
+                <!-- ══════════════════════════════════════════════
+                     FIX: exam_type values changed:
+                     "mcq/msq" → "mcq"   (so DB ENUM accepts it)
+                     "theory"  → "theory" (unchanged)
+                     add_question.html checks exam.exam_type != "theory"
+                     to decide whether to show options grid.
+                ══════════════════════════════════════════════ -->
+                <div class="form-group">
+                    <label class="form-label">Exam Type <span>*</span></label>
+                    <select name="exam_type" class="form-control" required>
+                        <option value="" disabled selected>Select exam type</option>
+                        <option value="mcq">MCQ / MSQ (Multiple Choice)</option>
+                        <option value="theory">Theory / Descriptive</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Total Marks <span>*</span></label>
+                    <input type="number" name="total_marks" class="form-control" placeholder="E.g., 100" min="1" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Program <span>*</span></label>
+                    <select name="program" class="form-control" required>
+                        <option value="" disabled selected>Select program</option>
+                        {% if admin_branch == 'ALL' or admin_branch == 'SCSE' %}
+                        <option value="BCA">BCA (Bachelor of Computer Applications)</option>
+                        <option value="MCA">MCA (Master of Computer Applications)</option>
+                        <option value="BTECH">B.Tech (Bachelor of Technology)</option>
+                        <option value="MTECH">M.Tech (Master of Technology)</option>
+                        {% endif %}
+                        {% if admin_branch == 'ALL' or admin_branch == 'SOM' %}
+                        <option value="BBA">BBA (Bachelor of Business Administration)</option>
+                        <option value="MBA">MBA (Master of Business Administration)</option>
+                        {% endif %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Branch <span>*</span></label>
+                    {% if admin_branch == 'ALL' %}
+                    <select name="branch" class="form-control" required>
+                        <option value="" disabled selected>Select branch</option>
+                        <option value="SCSE">SCSE (Computer Science & Engineering)</option>
+                        <option value="SOM">SOM (Management / Business)</option>
+                    </select>
+                    {% else %}
+                    <input type="text" name="branch" class="form-control" value="{{ admin_branch }}" readonly>
+                    <small style="color:#6c757d;font-size:0.85em;">Auto-assigned to your branch.</small>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Semester <span>*</span></label>
+                    <select name="semester" class="form-control" required>
+                        <option value="" disabled selected>Select semester</option>
+                        <option value="I">1st Semester</option>
+                        <option value="II">2nd Semester</option>
+                        <option value="III">3rd Semester</option>
+                        <option value="IV">4th Semester</option>
+                        <option value="V">5th Semester</option>
+                        <option value="VI">6th Semester</option>
+                        <option value="VII">7th Semester</option>
+                        <option value="VIII">8th Semester</option>
+                    </select>
+                </div>
+
+                <div class="form-group full-width">
+                    <label class="form-label">Start Date & Time <span>*</span></label>
+                    <input type="text" id="start_time" name="start_time" class="form-control"
+                           placeholder="Select start date and time" required autocomplete="off">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Duration (Minutes) <span>*</span></label>
+                    <input type="number" id="duration" name="duration" class="form-control"
+                           placeholder="E.g., 120" min="1" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">End Time (Auto-calculated)</label>
+                    <input type="text" id="end_time" class="form-control" readonly placeholder="Calculated automatically">
+                    <div class="time-preview" id="endTimePreview" style="display:none;">
+                        <span class="time-preview-label">Exam ends at</span>
+                        <span class="time-preview-value" id="endTimeValue"></span>
+                    </div>
+                </div>
+
+                <div class="form-group full-width">
+                    <label class="form-label">Browser Mode <span>*</span></label>
+                    <select name="browser_mode" class="form-control" required>
+                        <option value="" disabled selected>Select browser mode</option>
+                        <option value="any">Any Browser (default)</option>
+                        <option value="secure_any">Secure Browser Only</option>
+                        <option value="secure_campus">Secure Browser + Campus Network Only</option>
+                    </select>
+                </div>
+
+                <div class="form-group full-width">
+                    <label class="form-label">AI Proctoring <span>*</span></label>
+                    <select name="ai_proctoring" class="form-control" required>
+                        <option value="" disabled selected>Select AI Proctoring setting</option>
+                        <option value="0">Disabled — No AI camera monitoring</option>
+                        <option value="1">Enabled — Face + gaze detection active</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <div class="info-card">
+                <div class="info-icon-box">ℹ️</div>
+                <div class="info-text">
+                    End time is automatically calculated from start time + duration.
+                    <strong>MCQ/MSQ exam</strong> allows up to 50 questions with single/multiple choice options.
+                    <strong>Theory exam</strong> allows up to 20 descriptive questions evaluated by AI.
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-submit">Create Exam</button>
+                <a href="/admin" class="btn-cancel">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/air-datepicker@3.4.0/air-datepicker.js"></script>
+<script>
+    new AirDatepicker('#start_time', {
+        timepicker: true,
+        timeFormat: 'HH:mm',
+        minDate: new Date(),
+        autoClose: true,
+        position: 'bottom left',
+        onSelect: function({ date }) {
+            if (date) {
+                const y   = date.getFullYear();
+                const m   = String(date.getMonth()+1).padStart(2,'0');
+                const d   = String(date.getDate()).padStart(2,'0');
+                const h   = String(date.getHours()).padStart(2,'0');
+                const min = String(date.getMinutes()).padStart(2,'0');
+                document.getElementById('start_time').value = `${y}-${m}-${d} ${h}:${min}`;
+            }
+            calculateEndTime();
+        }
+    });
+
+    function calculateEndTime() {
+        const startInput    = document.getElementById('start_time').value;
+        const durationInput = document.getElementById('duration').value;
+        const endField      = document.getElementById('end_time');
+        const preview       = document.getElementById('endTimePreview');
+        const previewVal    = document.getElementById('endTimeValue');
+
+        if (startInput && durationInput && parseInt(durationInput) > 0) {
+            const d = new Date(startInput.replace(' ', 'T'));
+            if (isNaN(d.getTime())) return;
+            d.setMinutes(d.getMinutes() + parseInt(durationInput));
+            const opts = { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:true };
+            endField.value       = d.toLocaleString('en-US', opts);
+            previewVal.textContent = d.toLocaleString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
+            preview.style.display = 'flex';
+        } else {
+            endField.value = '';
+            preview.style.display = 'none';
+        }
+    }
+
+    document.getElementById('duration').addEventListener('input', calculateEndTime);
+    document.getElementById('start_time').addEventListener('change', calculateEndTime);
+    document.getElementById('start_time').addEventListener('blur', calculateEndTime);
+
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const startTime = document.getElementById('start_time').value;
+        const duration  = document.getElementById('duration').value;
+        if (!startTime || !duration) {
+            e.preventDefault();
+            alert('Please fill in both start time and duration.');
+            return;
+        }
+        const startDate = new Date(startTime.replace(' ', 'T'));
+        if (startDate < new Date()) {
+            if (!confirm('Start time is in the past. Continue anyway?')) {
+                e.preventDefault();
+            }
+        }
+    });
+</script>
+</body>
+</html>

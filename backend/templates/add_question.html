@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS - Add Question</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
+        body { background-color:#f4f7f6; color:#333; min-height:100vh; padding:2rem;
+               background-image:radial-gradient(circle at top right,#eef2f3,transparent 40%),
+                                radial-gradient(circle at bottom left,#e0eafc,transparent 40%); }
+        .dashboard-container { max-width:900px; margin:0 auto; animation:fadeIn 0.8s ease-in-out; }
+        .header-section { margin-bottom:3rem; }
+        .header-content { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; }
+        .header-text-group { display:flex; flex-direction:column; }
+        .header-title { font-size:2.5rem; font-weight:600; color:#2c3e50; text-transform:uppercase; letter-spacing:2px; line-height:1.2; }
+        .header-subtitle { color:#6c757d; font-size:0.95rem; margin-top:5px; font-weight:500; }
+        .action-btns-group { display:flex; gap:15px; }
+        .nav-btn { display:inline-block; color:#555; text-decoration:none; font-size:1rem; border:1px solid #ccc; padding:10px 25px; border-radius:25px; transition:0.3s; background:white; white-space:nowrap; font-weight:500; }
+        .nav-btn:hover { background:#f0f0f0; color:#111; }
+        .split-line { width:100%; height:2px; background:linear-gradient(90deg,transparent,#007bff,#00c6ff,#007bff,transparent); box-shadow:0 0 10px rgba(0,123,255,0.4); animation:glowingLine 2s infinite alternate; }
+        .form-card { background:rgba(255,255,255,0.85); backdrop-filter:blur(12px); border:1px solid rgba(0,0,0,0.05); border-radius:15px; padding:2.5rem; box-shadow:0 8px 32px rgba(31,38,135,0.07); }
+        .form-card-header { margin-bottom:2rem; display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #e9ecef; padding-bottom:1rem; }
+        .form-header-left { display:flex; align-items:center; gap:15px; }
+        .form-icon { width:45px; height:45px; background:rgba(0,123,255,0.1); color:#007bff; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; }
+        .form-card-title { font-size:1.4rem; font-weight:600; color:#2c3e50; }
+        .progress-badge { background:#e3f2fd; color:#0056b3; border:1px solid #b6d4fe; padding:6px 15px; border-radius:20px; font-size:0.9rem; font-weight:600; }
+        .form-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1.5rem; margin-bottom:2rem; }
+        #options-grid { grid-column:span 2; display:grid; grid-template-columns:repeat(2,1fr); gap:1.5rem; width:100%; }
+        .form-group { display:flex; flex-direction:column; gap:8px; }
+        .form-group.full-width { grid-column:span 2; }
+        .option-header { display:flex; justify-content:space-between; align-items:center; }
+        .form-label { font-size:0.95rem; font-weight:500; color:#495057; }
+        .form-label span { color:#dc3545; margin-left:3px; }
+
+        /* Correct answer badge — changes color based on selection */
+        .correct-check-label {
+            display:flex; align-items:center; gap:6px; font-size:0.8rem;
+            color:#007bff; font-weight:600; cursor:pointer;
+            background:rgba(0,123,255,0.1); padding:4px 12px;
+            border-radius:15px; transition:0.2s; border:1px solid transparent;
+        }
+        .correct-check-label:hover { background:rgba(0,123,255,0.2); }
+        .correct-check-label:has(input:checked) { background:#28a745; color:white; border-color:#218838; }
+        .correct-check-label input { cursor:pointer; accent-color:#fff; margin:0; width:14px; height:14px; }
+
+        /* Question type badge */
+        .type-hint {
+            font-size:0.78rem; padding:3px 10px; border-radius:12px; font-weight:600;
+            display:inline-block; margin-left:8px; vertical-align:middle;
+        }
+        .type-hint.mcq  { background:#e3f2fd; color:#1565c0; }
+        .type-hint.msq  { background:#f3e5f5; color:#6a1b9a; }
+        .type-hint.theory { background:#e8f5e9; color:#2e7d32; }
+
+        .form-control { width:100%; padding:12px 18px; background:#f8f9fa; border:1px solid #e9ecef; border-radius:10px; font-size:1rem; color:#333; transition:0.3s; font-family:'Poppins',sans-serif; }
+        textarea.form-control { resize:vertical; min-height:100px; }
+        .form-control:focus { outline:none; border-color:#007bff; background:white; box-shadow:0 0 10px rgba(0,123,255,0.1); }
+        .info-card { background:#f8f9fa; border-left:4px solid #6c757d; border-radius:10px; padding:1.2rem 1.5rem; margin-bottom:2rem; display:flex; gap:15px; align-items:center; }
+        .info-icon-box { font-size:1.2rem; color:#6c757d; }
+        .info-text { color:#495057; font-size:0.9rem; line-height:1.5; }
+        .form-actions { display:flex; gap:15px; align-items:center; }
+        .btn-submit { background:linear-gradient(45deg,#007bff,#00c6ff); color:white; border:none; padding:12px 30px; border-radius:25px; font-size:1rem; font-weight:500; cursor:pointer; transition:0.3s; flex:1; display:flex; justify-content:center; box-shadow:0 4px 15px rgba(0,123,255,0.2); }
+        .btn-submit:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,123,255,0.4); }
+        .btn-cancel { background:white; color:#6c757d; border:1px solid #ced4da; padding:12px 30px; border-radius:25px; font-size:1rem; font-weight:500; text-decoration:none; transition:0.3s; text-align:center; }
+        .btn-cancel:hover { background:#f8f9fa; color:#dc3545; border-color:#dc3545; }
+
+        @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes glowingLine { from{opacity:0.6} to{opacity:1;box-shadow:0 0 12px rgba(0,198,255,0.6)} }
+        @media(max-width:768px) {
+            .header-content{flex-direction:column;align-items:flex-start;gap:1.5rem}
+            .header-title{font-size:1.8rem}
+            .form-grid,#options-grid{grid-template-columns:1fr}
+            .form-group.full-width{grid-column:span 1}
+            .form-card{padding:1.5rem}
+            .form-card-header{flex-direction:column;align-items:flex-start;gap:10px}
+            .form-actions{flex-direction:column}
+            .btn-submit,.btn-cancel{width:100%}
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+    <div class="header-section">
+        <div class="header-content">
+            <div class="header-text-group">
+                <h1 class="header-title">Add Question</h1>
+                <p class="header-subtitle">Exam: <span style="color:#007bff;">{{ exam.title }}</span></p>
+            </div>
+            <div class="action-btns-group">
+                <a href="/questions/{{ exam.id }}" class="nav-btn">← Manage Questions</a>
+            </div>
+        </div>
+        <div class="split-line"></div>
+    </div>
+
+    <div class="form-card">
+        <div class="form-card-header">
+            <div class="form-header-left">
+                <div class="form-icon">❓</div>
+                <div class="form-card-title">Question Details</div>
+            </div>
+            <div class="progress-badge">Added: {{ question_count }} / {{ max_limit }}</div>
+        </div>
+
+        {% if question_count >= max_limit %}
+        <div class="info-card" style="border-left-color:#dc3545;background:#fff5f5;">
+            <div class="info-icon-box" style="color:#dc3545;">⚠️</div>
+            <div class="info-text">Maximum question limit ({{ max_limit }}) reached. You cannot add more questions.</div>
+        </div>
+        {% else %}
+
+        <form method="POST" id="questionForm">
+            <div class="form-grid">
+
+                <div class="form-group full-width">
+                    <label class="form-label">Question Text <span>*</span></label>
+                    <textarea name="question_text" class="form-control" rows="3" placeholder="Type your question here..." required></textarea>
+                </div>
+
+                <div class="form-group full-width">
+                    <label class="form-label">Question Type <span>*</span>
+                        <span id="typeHint" class="type-hint {% if exam.exam_type == 'theory' %}theory{% else %}mcq{% endif %}">
+                            {% if exam.exam_type == 'theory' %}Theory — descriptive answer{% else %}MCQ — single correct option{% endif %}
+                        </span>
+                    </label>
+                    <select name="question_type" id="q_type" class="form-control" onchange="onTypeChange()" required>
+                        {% if exam.exam_type == 'theory' %}
+                        <option value="theory" selected>Theory (Descriptive)</option>
+                        {% else %}
+                        <option value="mcq" selected>MCQ — Single Correct Answer</option>
+                        <option value="msq">MSQ — Multiple Correct Answers</option>
+                        {% endif %}
+                    </select>
+                </div>
+
+                <!-- MCQ / MSQ Options Grid -->
+                {% if exam.exam_type != 'theory' %}
+                <div id="options-grid">
+                    {% for letter, val in [('A','optionA'),('B','optionB'),('C','optionC'),('D','optionD')] %}
+                    <div class="form-group">
+                        <div class="option-header">
+                            <label class="form-label">Option {{ letter }} <span>*</span></label>
+                            <!-- MCQ: radio, MSQ: checkbox — toggled by JS -->
+                            <label class="correct-check-label" id="label-{{ val }}">
+                                <input type="radio" name="correct_answer" value="{{ val }}" class="ans-input" id="ans-{{ val }}">
+                                <span>✓ Correct</span>
+                            </label>
+                        </div>
+                        <input type="text" name="{{ val }}" class="form-control opt-input" placeholder="Option {{ letter }} text..." required>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Theory answer outline -->
+                <div id="theory-answer-box" class="form-group full-width" {% if exam.exam_type != 'theory' %}style="display:none;"{% endif %}>
+                    <label class="form-label">Correct Answer Outline <span>*</span></label>
+                    <textarea name="correct_answer" class="form-control" rows="3"
+                              placeholder="Enter reference answer for AI evaluation..." {% if exam.exam_type == 'theory' %}required{% endif %}></textarea>
+                </div>
+
+                <div class="form-group full-width">
+                    <label class="form-label">Marks <span>*</span></label>
+                    <input type="number" name="marks" class="form-control" placeholder="Marks for this question..." min="1" required>
+                </div>
+
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-submit">+ Add Question</button>
+                <a href="/admin" class="btn-cancel">Cancel</a>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // ── Type labels ──
+    const TYPE_HINTS = {
+        mcq:    { cls: 'mcq',    text: 'MCQ — single correct option' },
+        msq:    { cls: 'msq',    text: 'MSQ — multiple correct options' },
+        theory: { cls: 'theory', text: 'Theory — descriptive answer' }
+    };
+
+    function onTypeChange() {
+        const type       = document.getElementById('q_type').value;
+        const optGrid    = document.getElementById('options-grid');
+        const theoryBox  = document.getElementById('theory-answer-box');
+        const typeHint   = document.getElementById('typeHint');
+        const optInputs  = document.querySelectorAll('.opt-input');
+        const ansInputs  = document.querySelectorAll('.ans-input');
+
+        // Update hint badge
+        if (typeHint && TYPE_HINTS[type]) {
+            typeHint.className = 'type-hint ' + TYPE_HINTS[type].cls;
+            typeHint.textContent = TYPE_HINTS[type].text;
+        }
+
+        if (type === 'theory') {
+            if (optGrid)   { optGrid.style.display  = 'none'; }
+            if (theoryBox) { theoryBox.style.display = 'grid'; }
+            optInputs.forEach(i => { i.required = false; });
+            const ta = theoryBox ? theoryBox.querySelector('textarea') : null;
+            if (ta) ta.required = true;
+        } else {
+            if (optGrid)   { optGrid.style.display  = 'grid'; }
+            if (theoryBox) { theoryBox.style.display = 'none'; }
+            optInputs.forEach(i => { i.required = true; });
+
+            // MCQ = radio (only one can be selected)
+            // MSQ = checkbox (multiple can be selected)
+            ansInputs.forEach(input => {
+                input.type = (type === 'mcq') ? 'radio' : 'checkbox';
+                // Reset selection on type switch
+                input.checked = false;
+            });
+        }
+    }
+
+    // Form submit validation
+    document.getElementById('questionForm')?.addEventListener('submit', function(e) {
+        const type = document.getElementById('q_type').value;
+        if (type !== 'theory') {
+            const checked = document.querySelectorAll('.ans-input:checked');
+            if (checked.length === 0) {
+                e.preventDefault();
+                alert('Please select the correct answer' + (type === 'msq' ? 's' : '') + ' by ticking the checkbox!');
+                return;
+            }
+            if (type === 'mcq' && checked.length > 1) {
+                e.preventDefault();
+                alert('MCQ can only have ONE correct answer. Please select only one.');
+                return;
+            }
+        }
+    });
+
+    // Init on load
+    window.addEventListener('load', onTypeChange);
+</script>
+</body>
+</html>

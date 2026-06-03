@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS - Secure Portal</title>
+    <style>
+        /* =========================================
+           CSS RESET & CORE 
+           Poori screen cover karne ke liye
+           ========================================= */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden; /* No scrollbars */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #0f172a; /* Deep dark blue background */
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: white;
+            user-select: none; /* Text select disable */
+        }
+
+        /* =========================================
+           BACKGROUND ANIMATION (Stylish)
+           Moving glowing spheres
+           ========================================= */
+        .background-blobs {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 1;
+        }
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px); /* Blur for soft glow */
+            opacity: 0.3;
+            animation: moveBlobs 15s infinite alternate;
+        }
+        .blob-1 {
+            width: 400px; height: 400px;
+            background: #38bdf8; /* Cyan */
+            top: -100px; right: -100px;
+            animation-delay: 0s;
+        }
+        .blob-2 {
+            width: 300px; height: 300px;
+            background: #8b5cf6; /* Purple */
+            bottom: -50px; left: -50px;
+            animation-delay: -5s;
+        }
+        @keyframes moveBlobs {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(50px, -30px) scale(1.1); }
+            100% { transform: translate(-20px, 40px) scale(1); }
+        }
+
+        /* =========================================
+           GLASSMORPHISM CARD (Main UI)
+           ========================================= */
+        .secure-card {
+            position: relative;
+            z-index: 10; /* Blobs ke upar */
+            width: 80%;
+            max-width: 600px;
+            padding: 50px;
+            background: rgba(255, 255, 255, 0.03); /* Translucent */
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px); /* Frosty effect */
+            -webkit-backdrop-filter: blur(15px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+            text-align: center;
+        }
+
+        /* OEMS Logo style */
+        .logo-area {
+            font-size: 3em;
+            font-weight: 800;
+            color: #38bdf8; /* Cyan accent */
+            letter-spacing: -2px;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        .logo-subtitle {
+            font-size: 1.1em;
+            opacity: 0.6;
+            margin-bottom: 40px;
+            letter-spacing: 1px;
+        }
+
+        /* =========================================
+           SECURE ENV EXPLANATION LIST
+           Ye specific chizen specify krta hai MTE k liye
+           ========================================= */
+        .security-status {
+            text-align: left;
+            margin: 0 auto 50px auto;
+            max-width: 400px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 25px;
+        }
+        .status-header {
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: center;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 1.05em;
+        }
+        .status-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 15px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .icon-ok {
+            background-color: rgba(34, 197, 94, 0.1); /* Green tint */
+            color: #4ade80; /* Brighter green */
+        }
+        .status-text { opacity: 0.9; }
+
+        /* =========================================
+           STYLISH LOGIN BUTTON
+           ========================================= */
+        .login-btn {
+            background: transparent;
+            border: 2px solid #38bdf8;
+            color: #38bdf8;
+            padding: 18px 40px;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%; /* Full card width */
+            outline: none;
+        }
+
+        .login-btn:hover {
+            background: #38bdf8;
+            color: #0f172a; /* Dark background color */
+            box-shadow: 0 0 25px rgba(56, 189, 248, 0.5);
+            transform: translateY(-3px);
+        }
+        .login-btn:active {
+            transform: translateY(-1px);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="secure-card">
+        <div class="logo-area">OEMS</div>
+        <div class="logo-subtitle">SECURE BROWSER</div>
+
+        <div class="security-status">
+            <div class="status-header">Environment Check</div>
+            
+            <div class="status-item">
+                <div class="status-icon icon-ok">✓</div>
+                <div class="status-text">Fullscreen Kiosk Mode: Active</div>
+            </div>
+            <div class="status-item">
+                <div class="status-icon icon-ok">✓</div>
+                <div class="status-text">Keyboard Shortcuts: Disabled</div>
+            </div>
+            <div class="status-item">
+                <div class="status-icon icon-ok">✓</div>
+                <div class="status-text">Copy/Paste & Right-Click: Blocked</div>
+            </div>
+            <div class="status-item">
+                <div class="status-icon icon-ok">✓</div>
+                <div class="status-text">AI Proctoring (YOLO/BERT): Calibrated</div>
+            </div>
+        </div>
+
+        <button class="login-btn" onclick="window.location.href='http://localhost'">
+            Initialize Exam Session
+        </button>
+    </div>
+
+</body>
+</html>

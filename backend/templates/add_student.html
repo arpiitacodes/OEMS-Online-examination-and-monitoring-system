@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS - Add Student</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
+        body { background-color:#f4f7f6; color:#333; min-height:100vh; padding:2rem;
+               background-image: radial-gradient(circle at top right,#eef2f3,transparent 40%),
+                                 radial-gradient(circle at bottom left,#e0eafc,transparent 40%); }
+        .dashboard-container { max-width:900px; margin:0 auto; animation:fadeIn 0.8s ease-in-out; }
+
+        /* Header */
+        .header-section { margin-bottom:3rem; }
+        .header-content  { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; }
+        .header-text-group { display:flex; flex-direction:column; }
+        .header-title { font-size:2.5rem; font-weight:600; color:#2c3e50; text-transform:uppercase; letter-spacing:2px; line-height:1.2; }
+        .header-subtitle { color:#6c757d; font-size:0.95rem; margin-top:5px; }
+        .action-btns-group { display:flex; gap:15px; }
+        .nav-btn { display:inline-block; color:#555; text-decoration:none; font-size:1rem; border:1px solid #ccc; padding:10px 25px; border-radius:25px; transition:0.3s; background:white; white-space:nowrap; font-weight:500; }
+        .nav-btn:hover { background:#f0f0f0; color:#111; border-color:#aaa; }
+        .split-line { width:100%; height:2px; background:linear-gradient(90deg,transparent,#007bff,#00c6ff,#007bff,transparent); box-shadow:0 0 10px rgba(0,123,255,0.4); animation:glowingLine 2s infinite alternate; }
+
+        /* Tab Switcher */
+        .tab-bar { display:flex; gap:0; margin-bottom:2rem; background:rgba(255,255,255,0.85); border-radius:12px; padding:5px; box-shadow:0 2px 10px rgba(31,38,135,0.07); border:1px solid rgba(0,0,0,0.05); }
+        .tab-btn { flex:1; padding:10px; border:none; background:transparent; cursor:pointer; border-radius:9px; font-family:'Poppins',sans-serif; font-size:0.9rem; font-weight:500; color:#6c757d; transition:0.25s; }
+        .tab-btn.active { background:linear-gradient(45deg,#007bff,#00c6ff); color:white; box-shadow:0 4px 12px rgba(0,123,255,0.3); }
+
+        /* Form Card */
+        .form-card { background:rgba(255,255,255,0.85); backdrop-filter:blur(12px); border:1px solid rgba(0,0,0,0.05); border-radius:15px; padding:2.5rem; box-shadow:0 8px 32px rgba(31,38,135,0.07); }
+        .form-card-header { margin-bottom:2rem; display:flex; align-items:center; gap:15px; border-bottom:2px solid #e9ecef; padding-bottom:1rem; }
+        .form-icon { width:45px; height:45px; background:rgba(0,123,255,0.1); color:#007bff; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; }
+        .form-card-title { font-size:1.4rem; font-weight:600; color:#2c3e50; }
+
+        /* Form inputs */
+        .form-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1.5rem; margin-bottom:2rem; }
+        .form-group { display:flex; flex-direction:column; gap:8px; }
+        .form-group.full-width { grid-column:span 2; }
+        .form-label { font-size:0.95rem; font-weight:500; color:#495057; }
+        .form-label span { color:#dc3545; margin-left:3px; }
+        .form-label .opt-tag { color:#6c757d; font-size:0.8rem; font-weight:400; }
+        .form-control { width:100%; padding:12px 18px; background:#f8f9fa; border:1px solid #e9ecef; border-radius:10px; font-size:1rem; color:#333; transition:0.3s; font-family:'Poppins',sans-serif; }
+        .form-control:focus { outline:none; border-color:#007bff; background:white; box-shadow:0 0 10px rgba(0,123,255,0.1); }
+        .form-control::placeholder { color:#adb5bd; font-size:0.95rem; }
+        select.form-control { cursor:pointer; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 16px center; }
+
+        /* Info / Alert boxes */
+        .info-card { background:#e3f2fd; border-left:4px solid #007bff; border-radius:10px; padding:1.2rem 1.5rem; margin-bottom:2rem; display:flex; gap:15px; align-items:flex-start; }
+        .info-icon-box { font-size:1.2rem; color:#007bff; }
+        .info-title { font-weight:600; color:#0056b3; margin-bottom:5px; font-size:0.95rem; }
+        .info-text { color:#1976d2; font-size:0.85rem; line-height:1.6; }
+
+        .error-box { background:#ffebee; border:1px solid #ffcdd2; border-radius:10px; padding:12px 18px; color:#c62828; font-size:0.88rem; margin-bottom:1.2rem; }
+        .success-card { background:#e8f5e9; border:1px solid #c8e6c9; border-radius:12px; padding:1.5rem; margin-bottom:1.5rem; }
+        .success-title { font-size:1rem; font-weight:600; color:#2e7d32; margin-bottom:1rem; }
+        .stat-row { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+        .stat-pill { background:white; border-radius:10px; padding:10px 18px; text-align:center; flex:1; min-width:90px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+        .stat-pill .val { font-size:1.8rem; font-weight:700; color:#2c3e50; }
+        .stat-pill .lbl { font-size:0.75rem; color:#6c757d; font-weight:500; }
+        .skip-list { background:white; border-radius:8px; padding:1rem; max-height:150px; overflow-y:auto; }
+        .skip-item { font-size:0.82rem; color:#e65100; padding:3px 0; border-bottom:1px solid #fbe9e7; }
+        .skip-item:last-child { border-bottom:none; }
+
+        /* CSV drop zone */
+        .drop-zone { border:2px dashed #cbd5e1; border-radius:12px; padding:2rem; text-align:center; cursor:pointer; transition:0.3s; background:#f8fafc; position:relative; }
+        .drop-zone:hover, .drop-zone.dragover { border-color:#007bff; background:rgba(0,123,255,0.04); }
+        .drop-zone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+        .drop-zone-icon { font-size:2.2rem; margin-bottom:6px; }
+        .drop-zone-text { font-size:0.88rem; color:#6c757d; }
+        .drop-zone-text strong { color:#007bff; }
+        .file-chosen { font-size:0.82rem; color:#2e7d32; margin-top:6px; font-weight:500; display:none; }
+
+        /* CSV sample */
+        .csv-sample { background:#1e293b; border-radius:10px; padding:1rem 1.5rem; overflow-x:auto; margin-top:12px; }
+        .csv-sample code { color:#a5f3fc; font-size:0.8rem; line-height:1.8; white-space:pre; display:block; }
+
+        /* Toggle */
+        .toggle-row { display:flex; align-items:center; gap:12px; }
+        .toggle { position:relative; display:inline-block; width:44px; height:24px; }
+        .toggle input { opacity:0; width:0; height:0; }
+        .slider { position:absolute; cursor:pointer; inset:0; background:#dee2e6; border-radius:24px; transition:0.3s; }
+        .slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background:white; border-radius:50%; transition:0.3s; }
+        input:checked + .slider { background:#007bff; }
+        input:checked + .slider:before { transform:translateX(20px); }
+        .toggle-label { font-size:0.88rem; color:#495057; font-weight:500; }
+
+        /* Buttons */
+        .form-actions { display:flex; gap:15px; align-items:center; }
+        .btn-submit { background:linear-gradient(45deg,#007bff,#00c6ff); color:white; border:none; padding:12px 30px; border-radius:25px; font-size:1rem; font-weight:500; cursor:pointer; transition:0.3s; flex:1; display:flex; justify-content:center; box-shadow:0 4px 15px rgba(0,123,255,0.2); font-family:'Poppins',sans-serif; }
+        .btn-submit:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,123,255,0.4); }
+        .btn-cancel { background:white; color:#6c757d; border:1px solid #ced4da; padding:12px 30px; border-radius:25px; font-size:1rem; font-weight:500; text-decoration:none; transition:0.3s; text-align:center; }
+        .btn-cancel:hover { background:#f8f9fa; color:#dc3545; border-color:#dc3545; }
+
+        /* Tab content */
+        .tab-content { display:none; }
+        .tab-content.active { display:block; }
+
+        @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes glowingLine { from{opacity:0.6} to{opacity:1;box-shadow:0 0 12px rgba(0,198,255,0.6)} }
+        @media(max-width:768px) {
+            .header-content { flex-direction:column; align-items:flex-start; gap:1.5rem; }
+            .action-btns-group { width:100%; justify-content:space-between; display:flex; }
+            .header-title { font-size:1.8rem; }
+            .form-grid { grid-template-columns:1fr; }
+            .form-group.full-width { grid-column:span 1; }
+            .form-card { padding:1.5rem; }
+            .form-actions { flex-direction:column; }
+            .btn-submit, .btn-cancel { width:100%; }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+
+    <!-- Header -->
+    <div class="header-section">
+        <div class="header-content">
+            <div class="header-text-group">
+                <h1 class="header-title">Add Student</h1>
+                <p class="header-subtitle">Register single or multiple students into the system</p>
+            </div>
+            <div class="action-btns-group">
+                <a href="/student_manager" class="nav-btn">← Back to Manager</a>
+                <a href="/admin" class="nav-btn">← Dashboard</a>
+            </div>
+        </div>
+        <div class="split-line"></div>
+    </div>
+
+    <!-- Tab Switcher -->
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('single')" id="tab-single">👤 Single Student</button>
+        <button class="tab-btn" onclick="switchTab('bulk')" id="tab-bulk">📤 Bulk Upload (CSV)</button>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!-- SINGLE STUDENT TAB -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div class="tab-content active" id="content-single">
+
+        {% if single_error %}
+        <div class="error-box">⚠️ {{ single_error }}</div>
+        {% endif %}
+
+        <div class="form-card">
+            <div class="form-card-header">
+                <div class="form-icon">👤</div>
+                <div class="form-card-title">Single Registration</div>
+            </div>
+
+            <form method="POST" id="singleForm">
+                <input type="hidden" name="mode" value="single">
+                <div class="form-grid">
+
+                    <div class="form-group full-width">
+                        <label class="form-label">Full Name <span>*</span></label>
+                        <input type="text" name="name" class="form-control"
+                               placeholder="E.g., Anshuman Kumar Singh" required
+                               oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;">
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label class="form-label">Admission Number <span>*</span></label>
+                        <input type="text" name="admission_no" class="form-control"
+                               placeholder="E.g., 23SCSE0000001" required
+                               oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;">
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label class="form-label">Email <span class="opt-tag">(optional — for welcome email)</span></label>
+                        <input type="email" name="email" class="form-control"
+                               placeholder="E.g., student@domain.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Program <span>*</span></label>
+                        <select name="program" class="form-control" required>
+                            <option value="" disabled selected>Select program</option>
+                            {% if admin_branch == 'ALL' or admin_branch == 'SCSE' %}
+                            <option value="BCA">BCA</option>
+                            <option value="MCA">MCA</option>
+                            <option value="BTECH">B.Tech</option>
+                            <option value="MTECH">M.Tech</option>
+                            {% endif %}
+                            {% if admin_branch == 'ALL' or admin_branch == 'SOM' %}
+                            <option value="BBA">BBA</option>
+                            <option value="MBA">MBA</option>
+                            {% endif %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Branch <span>*</span></label>
+                        {% if admin_branch == 'ALL' %}
+                        <select name="branch" class="form-control" required>
+                            <option value="" disabled selected>Select branch</option>
+                            <option value="SCSE">SCSE</option>
+                            <option value="SOM">SOM</option>
+                        </select>
+                        {% else %}
+                        <input type="text" name="branch" class="form-control" value="{{ admin_branch }}" readonly style="cursor:not-allowed;background:#e9ecef;">
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Semester <span>*</span></label>
+                        <select name="semester" class="form-control" required>
+                            <option value="" disabled selected>Select semester</option>
+                            {% for s in ['I','II','III','IV','V','VI','VII','VIII'] %}
+                            <option value="{{ s }}">{{ loop.index }}{% if loop.index==1 %}st{% elif loop.index==2 %}nd{% elif loop.index==3 %}rd{% else %}th{% endif %} Semester</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <div class="toggle-row">
+                            <label class="toggle">
+                                <input type="checkbox" name="send_welcome_email" value="1" id="singleMailToggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="toggle-label">Send welcome email with credentials (requires email above)</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="info-card">
+                    <div class="info-icon-box">ℹ️</div>
+                    <div>
+                        <div class="info-title">Registration Guidelines</div>
+                        <div class="info-text">
+                            • Default password <strong>OEMS@12345</strong> is set automatically.<br>
+                            • Student can update password &amp; email after first login.<br>
+                            • Welcome email will be sent if email is provided and toggle is ON.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-submit">Register Student</button>
+                    <a href="/student_manager" class="btn-cancel">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!-- BULK UPLOAD TAB -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div class="tab-content" id="content-bulk">
+
+        {% if bulk_error %}
+        <div class="error-box">⚠️ {{ bulk_error }}</div>
+        {% endif %}
+
+        {% if bulk_result %}
+        <div class="success-card">
+            <div class="success-title">✅ Upload Complete</div>
+            <div class="stat-row">
+                <div class="stat-pill">
+                    <div class="val" style="color:#2e7d32;">{{ bulk_result.added }}</div>
+                    <div class="lbl">Added</div>
+                </div>
+                <div class="stat-pill">
+                    <div class="val" style="color:#e65100;">{{ bulk_result.skipped }}</div>
+                    <div class="lbl">Skipped</div>
+                </div>
+                {% if bulk_result.mailed > 0 %}
+                <div class="stat-pill">
+                    <div class="val" style="color:#1976d2;">{{ bulk_result.mailed }}</div>
+                    <div class="lbl">Emails Sent</div>
+                </div>
+                {% endif %}
+            </div>
+            {% if bulk_result.skip_list %}
+            <div style="font-size:0.85rem;font-weight:600;color:#e65100;margin-bottom:6px;">Skipped entries:</div>
+            <div class="skip-list">
+                {% for item in bulk_result.skip_list %}
+                <div class="skip-item">⚠ {{ item }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="form-card">
+            <div class="form-card-header">
+                <div class="form-icon">📤</div>
+                <div class="form-card-title">Bulk Upload via CSV</div>
+            </div>
+
+            <!-- CSV Format Guide -->
+            <div class="info-card" style="flex-direction:column;gap:8px;">
+                <div style="display:flex;gap:12px;align-items:flex-start;">
+                    <div class="info-icon-box">📋</div>
+                    <div>
+                        <div class="info-title">CSV Format Guide</div>
+                        <div class="info-text">
+                            <strong>Required:</strong> <code style="background:#bbdefb;padding:1px 5px;border-radius:3px;">name</code>, 
+                            <code style="background:#bbdefb;padding:1px 5px;border-radius:3px;">admission_no</code><br>
+                            <strong>Optional:</strong> <code style="background:#bbdefb;padding:1px 5px;border-radius:3px;">email</code>, 
+                            <code style="background:#bbdefb;padding:1px 5px;border-radius:3px;">program</code>, 
+                            <code style="background:#bbdefb;padding:1px 5px;border-radius:3px;">semester</code>, 
+                            <code style="background:#bbdefb;padding:1px 5px;border-radius:3px;">branch</code><br>
+                            If optional columns are absent, the defaults below are used. Password: <strong>OEMS@12345</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="csv-sample">
+<code>name,admission_no,email,program,semester,branch
+JOHN DOE,23SCSE0000001,john.doe@example.com,BTECH,V,SCSE
+JANE SMITH,23SCSE0000002,jane.smith@example.com,BTECH,V,SCSE
+ALEX KUMAR,23SCSE0000003,,BTECH,V,SCSE</code>
+                </div>
+            </div>
+
+            <form method="POST" enctype="multipart/form-data" id="bulkForm">
+                <input type="hidden" name="mode" value="bulk">
+                <div class="form-grid">
+
+                    <div class="form-group full-width">
+                        <label class="form-label">Select CSV File <span>*</span></label>
+                        <div class="drop-zone" id="dropZone">
+                            <input type="file" name="csv_file" accept=".csv" id="csvInput" required>
+                            <div class="drop-zone-icon">📂</div>
+                            <div class="drop-zone-text">Drag &amp; drop CSV here or <strong>click to browse</strong></div>
+                            <div class="file-chosen" id="fileChosen"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Default Program <span class="opt-tag">(if not in CSV)</span></label>
+                        <select name="program" class="form-control">
+                            <option value="BTECH">B.Tech</option>
+                            <option value="MTECH">M.Tech</option>
+                            <option value="BCA">BCA</option>
+                            <option value="MCA">MCA</option>
+                            <option value="BBA">BBA</option>
+                            <option value="MBA">MBA</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Default Semester <span class="opt-tag">(if not in CSV)</span></label>
+                        <select name="semester" class="form-control">
+                            {% for s in ['I','II','III','IV','V','VI','VII','VIII'] %}
+                            <option value="{{ s }}">{{ loop.index }}{% if loop.index==1 %}st{% elif loop.index==2 %}nd{% elif loop.index==3 %}rd{% else %}th{% endif %} Semester</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    {% if admin_branch == 'ALL' %}
+                    <div class="form-group">
+                        <label class="form-label">Default Branch <span class="opt-tag">(if not in CSV)</span></label>
+                        <input type="text" name="branch" class="form-control" placeholder="e.g. SCSE">
+                    </div>
+                    {% endif %}
+
+                    <div class="form-group full-width">
+                        <div class="toggle-row">
+                            <label class="toggle">
+                                <input type="checkbox" name="send_welcome_email" value="1" id="bulkMailToggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="toggle-label">Send welcome email with credentials to students who have email in CSV</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-submit">⬆️ Upload &amp; Register Students</button>
+                    <a href="/student_manager" class="btn-cancel">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+<script>
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById('tab-' + tab).classList.add('active');
+        document.getElementById('content-' + tab).classList.add('active');
+    }
+
+    // Auto-open bulk tab if bulk result/error exists
+    {% if bulk_result or bulk_error %}
+    switchTab('bulk');
+    {% endif %}
+
+    // CSV file name display
+    document.getElementById('csvInput').addEventListener('change', function() {
+        const el = document.getElementById('fileChosen');
+        if (this.files.length > 0) {
+            el.textContent = '✓ ' + this.files[0].name;
+            el.style.display = 'block';
+        }
+    });
+
+    // Drag & drop
+    const dz = document.getElementById('dropZone');
+    dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', ()  => dz.classList.remove('dragover'));
+    dz.addEventListener('drop',      e  => {
+        e.preventDefault(); dz.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length) {
+            document.getElementById('csvInput').files = files;
+            document.getElementById('fileChosen').textContent = '✓ ' + files[0].name;
+            document.getElementById('fileChosen').style.display = 'block';
+        }
+    });
+
+    // Single form validation
+    document.getElementById('singleForm').addEventListener('submit', function(e) {
+        const name    = document.querySelector('input[name="name"]').value;
+        const adm     = document.querySelector('input[name="admission_no"]').value;
+        const program = document.querySelector('select[name="program"]').value;
+        const semester= document.querySelector('select[name="semester"]').value;
+        if (!name || !adm || !program || !semester) {
+            e.preventDefault(); alert('Please fill in all required fields.'); return;
+        }
+        if (!adm.match(/^[A-Z0-9]+$/)) {
+            e.preventDefault(); alert('Admission number: only capital letters and numbers allowed.'); return;
+        }
+    });
+</script>
+</body>
+</html>

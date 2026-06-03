@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS · Plagiarism Detection</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        body { background-color: #f4f7f6; color: #333; min-height: 100vh; padding: 2rem;
+               background-image: radial-gradient(circle at top right, #eef2f3, transparent 40%),
+                                 radial-gradient(circle at bottom left, #e0eafc, transparent 40%); }
+        .container { max-width: 1100px; margin: 0 auto; animation: fadeIn 0.8s ease-in-out; }
+
+        /* Header */
+        .header-section { margin-bottom: 2.5rem; }
+        .header-content { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .header-title { font-size: 2.2rem; font-weight: 600; color: #2c3e50; text-transform: uppercase; letter-spacing: 2px; }
+        .back-btn { display: inline-block; color: #555; text-decoration: none; font-size: 0.95rem; border: 1px solid #ccc; padding: 9px 22px; border-radius: 25px; transition: 0.3s; background: white; white-space: nowrap; font-weight: 500; }
+        .back-btn:hover { background: #f0f0f0; color: #111; border-color: #aaa; }
+        .split-line { width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #007bff, #00c6ff, #007bff, transparent); animation: glowingLine 2s infinite alternate; }
+
+        /* Summary strip */
+        .summary-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .summary-pill { background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px; padding: 1rem 1.2rem; text-align: center; box-shadow: 0 4px 15px rgba(31,38,135,0.05); }
+        .summary-val { font-size: 1.7rem; font-weight: 600; color: #2c3e50; }
+        .summary-lbl { font-size: 0.78rem; color: #6c757d; font-weight: 500; margin-top: 2px; }
+
+        /* Suspicious students alert */
+        .alert-box { background: #fff5f5; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem; }
+        .alert-title { font-size: 0.95rem; font-weight: 600; color: #dc2626; margin-bottom: 8px; }
+        .suspect-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .suspect-chip { background: #fee2e2; color: #c62828; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 20px; font-size: 0.82rem; font-weight: 600; }
+
+        /* Table */
+        .table-wrapper { background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.05); border-radius: 15px; overflow-x: auto; box-shadow: 0 8px 32px rgba(31,38,135,0.07); }
+        .table-header { padding: 1.2rem 1.5rem; border-bottom: 1px solid #e9ecef; display: flex; justify-content: space-between; align-items: center; }
+        .table-title { font-size: 1.05rem; font-weight: 600; color: #2c3e50; }
+
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background: rgba(0,123,255,0.05); color: #0056b3; padding: 0.9rem 1rem; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid #e9ecef; white-space: nowrap; font-size: 0.85rem; cursor: pointer; user-select: none; }
+        th:hover { background: rgba(0,123,255,0.1); }
+        th.sorted-asc::after  { content: ' ↑'; }
+        th.sorted-desc::after { content: ' ↓'; }
+        td { padding: 0.9rem 1rem; border-bottom: 1px solid #e9ecef; color: #495057; vertical-align: middle; font-size: 0.88rem; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(0,123,255,0.02); }
+        tr.suspicious td { background: rgba(239,68,68,0.04); }
+
+        /* Similarity meter */
+        .sim-wrap { display: flex; align-items: center; gap: 10px; }
+        .sim-bar-track { flex: 1; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; min-width: 80px; }
+        .sim-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+        .sim-val { font-weight: 600; font-size: 0.85rem; min-width: 40px; text-align: right; }
+
+        .badge-ok   { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; }
+        .badge-warn { background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; }
+        .badge-sus  { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; }
+
+        /* Search */
+        .toolbar { display: flex; gap: 12px; margin-bottom: 1.2rem; flex-wrap: wrap; align-items: center; }
+        .search-box { flex: 1; min-width: 200px; padding: 9px 14px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.9rem; font-family: 'Poppins',sans-serif; background: white; color: #2c3e50; outline: none; transition: 0.2s; }
+        .search-box:focus { border-color: #007bff; box-shadow: 0 0 0 3px rgba(0,123,255,0.08); }
+        .filter-sel { padding: 9px 14px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.9rem; font-family: 'Poppins',sans-serif; background: white; color: #2c3e50; outline: none; cursor: pointer; }
+
+        .empty-state { text-align: center; padding: 3rem; color: #6c757d; }
+
+        @keyframes fadeIn      { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes glowingLine { from{opacity:0.6} to{opacity:1;box-shadow:0 0 12px rgba(0,198,255,0.6)} }
+        @media (max-width:768px) { .header-content { flex-direction:column; align-items:flex-start; gap:1rem; } }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header-section">
+        <div class="header-content">
+            <h1 class="header-title">Plagiarism Detection</h1>
+            <a href="/admin" class="back-btn">← Back to Dashboard</a>
+        </div>
+        <div class="split-line"></div>
+    </div>
+
+    <!-- Summary strip -->
+    <div class="summary-strip">
+        <div class="summary-pill">
+            <div class="summary-val">{{ similarity_results|length if similarity_results else 0 }}</div>
+            <div class="summary-lbl">Pairs Compared</div>
+        </div>
+        <div class="summary-pill">
+            <div class="summary-val">{{ cheaters|length if cheaters else 0 }}</div>
+            <div class="summary-lbl">Suspicious Students</div>
+        </div>
+        <div class="summary-pill">
+            <div class="summary-val">
+                {% if similarity_results %}
+                    {{ similarity_results|selectattr('similarity','gt',80)|list|length }}
+                {% else %}0{% endif %}
+            </div>
+            <div class="summary-lbl">High Similarity Pairs</div>
+        </div>
+        <div class="summary-pill">
+            <div class="summary-val">
+                {% if similarity_results %}
+                    {{ (similarity_results|map(attribute='similarity')|sum / similarity_results|length)|round(1) }}%
+                {% else %}0%{% endif %}
+            </div>
+            <div class="summary-lbl">Avg Similarity</div>
+        </div>
+    </div>
+
+    <!-- Suspicious students alert -->
+    {% if cheaters %}
+    <div class="alert-box">
+        <div class="alert-title">⚠️ Suspicious Students (similarity &gt; 80%) — {{ cheaters|length }} flagged</div>
+        <div class="suspect-chips">
+            {% for c in cheaters %}
+            <span class="suspect-chip">{{ c }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Search + filter -->
+    <div class="toolbar">
+        <input class="search-box" id="searchBox" type="text" placeholder="Search by student name...">
+        <select class="filter-sel" id="statusFilter" onchange="filterTable()">
+            <option value="">All Status</option>
+            <option value="sus">Suspicious (&gt;80%)</option>
+            <option value="warn">Moderate (40–80%)</option>
+            <option value="ok">OK (&lt;40%)</option>
+        </select>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrapper">
+        <div class="table-header">
+            <div class="table-title">Similarity Report</div>
+            <span style="font-size:0.82rem;color:#6c757d;" id="recordCount">
+                {{ similarity_results|length if similarity_results else 0 }} pairs
+            </span>
+        </div>
+
+        {% if similarity_results %}
+        <table>
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">#</th>
+                    <th onclick="sortTable(1)">Student 1</th>
+                    <th onclick="sortTable(2)">Student 2</th>
+                    <th onclick="sortTable(3)">Similarity</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="plagBody">
+                {% for s in similarity_results|sort(attribute='similarity', reverse=True) %}
+                <tr class="{% if s.similarity > 80 %}suspicious{% endif %}"
+                    data-sim="{{ s.similarity }}"
+                    data-s1="{{ s.student1 }}"
+                    data-s2="{{ s.student2 }}">
+                    <td style="color:#6c757d;font-size:0.82rem;">{{ loop.index }}</td>
+                    <td style="font-weight:500;color:#2c3e50;">{{ s.student1 }}</td>
+                    <td style="font-weight:500;color:#2c3e50;">{{ s.student2 }}</td>
+                    <td>
+                        <div class="sim-wrap">
+                            <div class="sim-bar-track">
+                                <div class="sim-bar-fill"
+                                     style="width:{{ s.similarity }}%;
+                                            background:{% if s.similarity > 80 %}#ef4444{% elif s.similarity > 40 %}#f59e0b{% else %}#22c55e{% endif %}">
+                                </div>
+                            </div>
+                            <span class="sim-val"
+                                  style="color:{% if s.similarity > 80 %}#c62828{% elif s.similarity > 40 %}#e65100{% else %}#2e7d32{% endif %}">
+                                {{ s.similarity }}%
+                            </span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if s.similarity > 80 %}
+                            <span class="badge-sus">⚠ Suspicious</span>
+                        {% elif s.similarity > 40 %}
+                            <span class="badge-warn">Moderate</span>
+                        {% else %}
+                            <span class="badge-ok">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div style="font-size:1.05rem;font-weight:500;color:#2c3e50;">No data to compare</div>
+            <p style="margin-top:6px;">Either no theory answers were submitted, or all answers were too short to compare.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+<script>
+    document.getElementById('searchBox').addEventListener('input', filterTable);
+
+    function filterTable() {
+        const q      = document.getElementById('searchBox').value.toLowerCase();
+        const status = document.getElementById('statusFilter').value;
+        const rows   = document.querySelectorAll('#plagBody tr');
+        let visible  = 0;
+
+        rows.forEach(row => {
+            const s1  = (row.dataset.s1 || '').toLowerCase();
+            const s2  = (row.dataset.s2 || '').toLowerCase();
+            const sim = parseFloat(row.dataset.sim || 0);
+
+            const matchQ = !q || s1.includes(q) || s2.includes(q);
+            let matchS = true;
+            if (status === 'sus')  matchS = sim > 80;
+            if (status === 'warn') matchS = sim > 40 && sim <= 80;
+            if (status === 'ok')   matchS = sim <= 40;
+
+            row.style.display = (matchQ && matchS) ? '' : 'none';
+            if (matchQ && matchS) visible++;
+        });
+
+        document.getElementById('recordCount').textContent = visible + ' pairs';
+    }
+
+    let sortDir = {};
+    function sortTable(col) {
+        const tbody = document.getElementById('plagBody');
+        if (!tbody) return;
+        const rows  = Array.from(tbody.querySelectorAll('tr'));
+        const dir   = sortDir[col] === 'asc' ? 'desc' : 'asc';
+        sortDir     = {}; sortDir[col] = dir;
+
+        document.querySelectorAll('th').forEach((th, i) => {
+            th.className = i === col ? 'sorted-' + dir : '';
+        });
+
+        rows.sort((a, b) => {
+            const aT = a.children[col]?.textContent.trim() || '';
+            const bT = b.children[col]?.textContent.trim() || '';
+            const aN = parseFloat(aT), bN = parseFloat(bT);
+            if (!isNaN(aN) && !isNaN(bN)) return dir === 'asc' ? aN - bN : bN - aN;
+            return dir === 'asc' ? aT.localeCompare(bT) : bT.localeCompare(aT);
+        });
+
+        rows.forEach(r => tbody.appendChild(r));
+    }
+</script>
+</body>
+</html>

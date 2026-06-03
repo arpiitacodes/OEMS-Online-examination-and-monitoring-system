@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src https://fonts.gstatic.com;
+        img-src 'self' data: blob:;
+        media-src 'self' blob:;
+        connect-src 'self' http://127.0.0.1:5000;
+        frame-ancestors 'none';
+    ">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{{ exam.title }} · Secure Exam</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary:#6366f1; --primary-dim:#4338ca; --danger:#ef4444; --warning:#f59e0b;
+            --success:#10b981; --bg:#080c14; --surface:#0f172a; --card:#111827;
+            --border:rgba(255,255,255,0.07); --text:#f1f5f9; --muted:#64748b;
+            --font:'Space Grotesk',sans-serif; --mono:'JetBrains Mono',monospace;
+        }
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+        html,body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none;}
+        textarea,input[type="text"]{-webkit-user-select:text;-moz-user-select:text;user-select:text;}
+        img,video,canvas{-webkit-user-drag:none;pointer-events:none;}
+        #proctorVideo{pointer-events:auto;}
+        ::-webkit-scrollbar{width:6px;} ::-webkit-scrollbar-track{background:var(--surface);} ::-webkit-scrollbar-thumb{background:var(--primary);border-radius:3px;}
+        body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;opacity:0.4;}
+        .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:clamp(2rem,6vw,5rem);font-weight:700;font-family:var(--mono);color:rgba(255,255,255,0.018);pointer-events:none;z-index:2;white-space:nowrap;letter-spacing:8px;user-select:none;}
+        /* HEADER */
+        .header{position:fixed;top:0;left:0;right:0;height:64px;background:rgba(8,12,20,0.92);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;z-index:1000;}
+        .header-left{display:flex;align-items:center;gap:12px;}
+        .live-badge{display:flex;align-items:center;gap:6px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;color:#ef4444;letter-spacing:1px;}
+        .live-dot{width:6px;height:6px;background:#ef4444;border-radius:50%;animation:blink 1s infinite;}
+        .exam-title{font-size:0.95rem;font-weight:600;color:var(--text);max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .student-chip{font-size:0.8rem;color:var(--muted);background:rgba(255,255,255,0.04);border:1px solid var(--border);padding:3px 10px;border-radius:20px;}
+        .timer-wrap{text-align:center;}
+        .timer-lbl{font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:2px;}
+        .timer{font-family:var(--mono);font-size:1.5rem;font-weight:600;color:var(--text);background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);padding:4px 16px;border-radius:8px;transition:all 0.3s;}
+        .timer.critical{background:var(--danger);color:#fff;animation:pulse-scale 0.8s infinite;}
+        .viol-chip{font-family:var(--mono);font-size:0.8rem;font-weight:600;color:#ef4444;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);padding:4px 12px;border-radius:20px;}
+
+        /* ═══════════════════════════════════════════════════
+           VIOLATION ALERT BOX — Prominent, center-top screen
+           Shows for all violations with distinct icons
+        ═══════════════════════════════════════════════════ */
+        #violationAlert{
+            position:fixed;top:80px;left:50%;
+            transform:translateX(-50%) translateY(-20px);
+            z-index:20000;opacity:0;pointer-events:none;
+            transition:all 0.35s cubic-bezier(.34,1.56,.64,1);
+            min-width:380px;max-width:580px;width:90%;
+        }
+        #violationAlert.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+        .va-box{
+            background:linear-gradient(135deg,#200808,#450f0f);
+            border:2px solid var(--danger);
+            border-radius:16px;padding:18px 22px;
+            box-shadow:0 0 0 4px rgba(239,68,68,0.18),0 24px 60px rgba(0,0,0,0.75);
+            display:flex;align-items:center;gap:16px;
+        }
+        .va-box.warn-level{background:linear-gradient(135deg,#1c1200,#3d2800);border-color:var(--warning);box-shadow:0 0 0 4px rgba(245,158,11,0.18),0 24px 60px rgba(0,0,0,0.75);}
+        .va-icon{font-size:2.4rem;flex-shrink:0;line-height:1;}
+        .va-body{flex:1;}
+        .va-title{font-size:0.95rem;font-weight:800;color:#fca5a5;letter-spacing:0.5px;margin-bottom:5px;text-transform:uppercase;}
+        .va-title.warn-level{color:#fcd34d;}
+        .va-detail{font-size:0.82rem;color:rgba(255,255,255,0.65);line-height:1.45;}
+        .va-right{text-align:center;flex-shrink:0;min-width:52px;}
+        .va-num{font-family:var(--mono);font-size:2rem;font-weight:900;color:var(--danger);line-height:1;}
+        .va-num.warn-level{color:var(--warning);}
+        .va-of5{font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+
+        /* Small toast — non-violation info */
+        .alert-toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-120px);background:linear-gradient(135deg,#92400e,#b45309);color:#fff;padding:12px 24px;border-radius:10px;z-index:10001;font-weight:600;font-size:0.9rem;border:1px solid rgba(255,255,255,0.15);box-shadow:0 20px 60px rgba(0,0,0,0.5);opacity:0;transition:all 0.35s cubic-bezier(.34,1.56,.64,1);display:flex;align-items:center;gap:10px;white-space:nowrap;}
+        .alert-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+        .alert-toast.critical{background:linear-gradient(135deg,#7f1d1d,#dc2626);}
+
+        /* TERMINATION OVERLAY */
+        #terminationOverlay{position:fixed;inset:0;background:rgba(0,0,0,0.97);display:none;flex-direction:column;justify-content:center;align-items:center;z-index:100000;text-align:center;padding:40px;}
+        .term-icon{font-size:4rem;margin-bottom:16px;}
+        .term-title{font-size:2rem;font-weight:700;color:var(--danger);margin-bottom:12px;}
+        .term-reason{color:var(--muted);margin-bottom:20px;font-size:1rem;}
+        .term-sid{font-family:var(--mono);font-size:0.85rem;background:rgba(255,255,255,0.06);padding:8px 20px;border-radius:8px;color:var(--muted);}
+
+        /* GATEKEEPER */
+        #gatekeeper{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10000;padding:40px;}
+        .gate-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:40px;max-width:480px;width:100%;text-align:center;}
+        .gate-icon{width:72px;height:72px;background:linear-gradient(135deg,var(--primary),#7c3aed);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 24px;box-shadow:0 16px 40px rgba(99,102,241,0.3);}
+        .gate-title{font-size:1.5rem;font-weight:700;margin-bottom:8px;}
+        .gate-sub{color:var(--muted);font-size:0.9rem;margin-bottom:28px;line-height:1.6;}
+        .checks{text-align:left;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:28px;font-family:var(--mono);font-size:0.82rem;}
+        .check-row{display:flex;align-items:center;gap:10px;padding:6px 0;color:var(--muted);}
+        .check-row.done{color:var(--success);}
+        .check-row.fail{color:var(--danger);}
+        .start-btn{width:100%;padding:14px;font-family:var(--font);font-size:1rem;font-weight:600;border:none;border-radius:12px;background:linear-gradient(135deg,var(--primary),#7c3aed);color:#fff;cursor:pointer;transition:all 0.3s;box-shadow:0 10px 30px rgba(99,102,241,0.3);}
+        .start-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 16px 40px rgba(99,102,241,0.45);}
+        .start-btn:disabled{opacity:0.5;cursor:not-allowed;}
+
+        /* PROCTOR PANEL */
+        .proctor-panel{position:fixed;top:80px;right:16px;width:240px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;z-index:999;}
+        .panel-header{display:flex;align-items:center;gap:8px;font-size:0.75rem;font-weight:600;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;}
+        .camera-box{width:100%;height:140px;background:#000;border-radius:10px;overflow:hidden;position:relative;border:1px solid rgba(255,255,255,0.08);}
+        #proctorVideo{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);pointer-events:auto;}
+        .scan-line{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--success),transparent);animation:scan 2.5s linear infinite;}
+        /* FIX: Camera status BELOW camera, NOT overlaid */
+        .camera-status{margin-top:6px;font-size:0.73rem;color:var(--muted);text-align:center;font-family:var(--mono);min-height:18px;padding:0 2px;}
+        .ai-status{margin-top:8px;padding:10px 12px;border-radius:8px;font-size:0.8rem;background:rgba(16,185,129,0.08);border-left:3px solid var(--success);transition:all 0.3s;}
+        .ai-status.warning{background:rgba(245,158,11,0.08);border-left-color:var(--warning);}
+        .ai-status.danger{background:rgba(239,68,68,0.08);border-left-color:var(--danger);}
+        .ai-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;}
+        .ai-dot.ok{background:var(--success);}
+        .ai-dot.warn{background:var(--warning);animation:blink 1s infinite;}
+        .ai-dot.bad{background:var(--danger);animation:blink 0.5s infinite;}
+        .viol-bar{margin-top:10px;padding:8px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.15);border-radius:8px;display:flex;justify-content:space-between;align-items:center;}
+        .viol-bar-lbl{font-size:0.75rem;color:rgba(252,165,165,0.7);}
+        .viol-bar-val{font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--danger);}
+        .integrity-wrap{margin-top:10px;}
+        .integrity-lbl{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;}
+        .integrity-track{height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;}
+        .integrity-fill{height:100%;width:100%;background:var(--success);border-radius:2px;transition:width 0.5s ease,background 0.5s;}
+
+        /* EXAM */
+        .exam-wrap{max-width:760px;margin:88px auto 60px;padding:0 16px;}
+        .q-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:32px;display:none;animation:slideUp 0.35s ease-out;}
+        .q-card.active{display:block;}
+        @keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+        .q-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border);}
+        .q-num{background:linear-gradient(135deg,var(--primary),#7c3aed);color:#fff;padding:5px 16px;border-radius:20px;font-size:0.82rem;font-weight:600;}
+        .q-marks{color:var(--muted);font-size:0.85rem;font-weight:500;}
+        .q-text{font-size:1.1rem;line-height:1.75;color:var(--text);font-weight:500;margin-bottom:28px;}
+        .options{display:flex;flex-direction:column;gap:10px;}
+        .opt{display:flex;align-items:center;padding:16px 20px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:12px;cursor:pointer;transition:all 0.2s;}
+        .opt:hover{border-color:var(--primary);background:rgba(99,102,241,0.07);transform:translateX(4px);}
+        .opt.selected{border-color:var(--success);background:rgba(16,185,129,0.08);}
+        .opt input{display:none;}
+        .opt-marker{width:26px;height:26px;flex-shrink:0;border:1.5px solid rgba(255,255,255,0.2);border-radius:50%;margin-right:14px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;transition:all 0.2s;}
+        .opt.selected .opt-marker{background:var(--success);border-color:var(--success);color:#fff;}
+        .opt-text{font-size:0.95rem;color:var(--text);}
+        .answer-area{width:100%;min-height:220px;padding:16px 20px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.08);border-radius:12px;color:var(--text);font-size:0.95rem;font-family:var(--font);resize:vertical;transition:all 0.2s;-webkit-user-select:text;user-select:text;}
+        .answer-area:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,0.12);}
+        .nav-bar{display:flex;justify-content:space-between;align-items:center;margin-top:32px;padding-top:24px;border-top:1px solid var(--border);}
+        .nav-btn{display:flex;align-items:center;gap:8px;padding:11px 24px;border-radius:10px;font-family:var(--font);font-weight:600;font-size:0.9rem;cursor:pointer;border:none;transition:all 0.25s;}
+        .nav-prev{background:rgba(255,255,255,0.07);color:var(--text);}
+        .nav-prev:hover{background:rgba(255,255,255,0.12);transform:translateX(-3px);}
+        .nav-next{background:linear-gradient(135deg,var(--primary),#7c3aed);color:#fff;box-shadow:0 8px 24px rgba(99,102,241,0.3);}
+        .nav-next:hover{transform:translateX(3px);box-shadow:0 12px 32px rgba(99,102,241,0.45);}
+        .nav-submit{background:linear-gradient(135deg,var(--success),#059669);color:#fff;display:none;box-shadow:0 8px 24px rgba(16,185,129,0.3);}
+        .nav-submit:hover{transform:translateX(3px);}
+        .progress-bar-wrap{position:fixed;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,0.05);z-index:1000;}
+        .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--primary),#7c3aed);transition:width 0.4s ease;}
+
+        /* NAV PANEL */
+        .q-nav-panel{position:fixed;top:80px;left:16px;width:200px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;z-index:998;max-height:calc(100vh - 110px);overflow-y:auto;}
+        .q-nav-title{font-size:0.7rem;font-weight:600;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;}
+        .q-nav-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+        .q-nav-btn{width:36px;height:36px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:var(--muted);font-size:0.75rem;font-weight:600;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;font-family:var(--font);}
+        .q-nav-btn:hover{border-color:var(--primary);color:var(--primary);background:rgba(99,102,241,0.1);}
+        .q-nav-btn.current{border-color:var(--primary);background:var(--primary);color:white;}
+        .q-nav-btn.answered{border-color:var(--success);background:rgba(16,185,129,0.15);color:var(--success);}
+        .q-nav-btn.answered.current{background:var(--success);color:white;border-color:var(--success);}
+        .q-nav-legend{margin-top:12px;display:flex;flex-direction:column;gap:5px;}
+        .legend-item{display:flex;align-items:center;gap:6px;font-size:0.7rem;color:var(--muted);}
+        .legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+        @keyframes pulse-scale{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+        @keyframes scan{0%{top:0}100%{top:100%}}
+
+        @media(max-width:1100px){.proctor-panel{position:relative;top:auto;right:auto;width:100%;margin-bottom:16px;}.exam-wrap{margin-top:80px;}.q-nav-panel{display:none;}}
+        @media(max-width:600px){.exam-title{display:none;}.q-card{padding:20px;}}
+        @media(min-width:1100px){.exam-wrap{margin-left:auto!important;margin-right:auto!important;}}
+    </style>
+</head>
+<body>
+
+<div class="watermark" id="watermark">SECURE</div>
+
+<!-- ══ VIOLATION ALERT BOX — Prominent center-top alert ══ -->
+<div id="violationAlert">
+    <div class="va-box" id="vaBox">
+        <div class="va-icon" id="vaIcon">🚨</div>
+        <div class="va-body">
+            <div class="va-title" id="vaTitle">SECURITY VIOLATION</div>
+            <div class="va-detail" id="vaDetail">Violation detected</div>
+        </div>
+        <div class="va-right">
+            <div class="va-num" id="vaNum">0</div>
+            <div class="va-of5">of 5</div>
+        </div>
+    </div>
+</div>
+
+<!-- Small toast for info-only messages -->
+<div id="alertToast" class="alert-toast">
+    <span id="alertIcon">⚠️</span>
+    <span id="alertText">Security Warning</span>
+</div>
+
+<div id="terminationOverlay">
+    <div class="term-icon">🚫</div>
+    <div class="term-title">EXAM TERMINATED</div>
+    <p class="term-reason" id="termReason">Security violation detected.</p>
+    <div class="term-sid" id="termSid">Session: ---</div>
+</div>
+
+<header class="header">
+    <div class="header-left">
+        <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+        <span class="exam-title">{{ exam.title }}</span>
+        <span class="student-chip">{{ session.student_name }} · {{ session.admission_no }}</span>
+    </div>
+    <div class="timer-wrap">
+        <div class="timer-lbl">Time Remaining</div>
+        <div class="timer" id="timerDisplay">00:00:00</div>
+    </div>
+    <div class="viol-chip" id="violChip">0 / 5 violations</div>
+</header>
+
+<div id="gatekeeper">
+    <div class="gate-card">
+        <div class="gate-icon">🛡️</div>
+        <h1 class="gate-title">Secure Exam Environment</h1>
+        <p class="gate-sub">Camera access is mandatory. AI proctoring will monitor you throughout the exam.</p>
+        <div class="checks" id="systemChecks">
+            <div class="check-row" id="chk-cam">⏳ &nbsp;{% if ai_proctoring %}Camera initialization...{% else %}Preparing exam...{% endif %}</div>
+            <div class="check-row" id="chk-sec">⏳ &nbsp;Security checks...</div>
+            <div class="check-row" id="chk-ai"> ⏳ &nbsp;{% if ai_proctoring %}AI proctoring ready...{% else %}Standard mode...{% endif %}</div>
+        </div>
+        <button class="start-btn" id="startBtn" onclick="fortress.init()">
+            {% if ai_proctoring %}Grant Camera Access &amp; Start Exam{% else %}Start Exam{% endif %}
+        </button>
+    </div>
+</div>
+
+<div class="proctor-panel" id="proctorPanel" style="display:none;">
+    <div class="panel-header"><div class="live-dot"></div>LIVE PROCTORING</div>
+    <div class="camera-box">
+        <video id="proctorVideo" autoplay playsinline muted></video>
+        <div class="scan-line"></div>
+    </div>
+    <!-- FIX: Status text BELOW camera — no overlay -->
+    <div class="camera-status" id="cameraStatus">Detecting...</div>
+    <div class="ai-status" id="aiStatus">
+        <span class="ai-dot ok"></span>
+        <strong style="color:var(--success)">System Secure</strong>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:3px;">AI monitoring active</div>
+    </div>
+    <div class="viol-bar">
+        <span class="viol-bar-lbl">Violations</span>
+        <span class="viol-bar-val" id="violCount">0/5</span>
+    </div>
+    <div class="integrity-wrap">
+        <div class="integrity-lbl">Integrity Score</div>
+        <div class="integrity-track"><div class="integrity-fill" id="integrityFill"></div></div>
+    </div>
+</div>
+
+<div class="q-nav-panel" id="qNavPanel" style="display:none;">
+    <div class="q-nav-title">Questions</div>
+    <div class="q-nav-grid" id="qNavGrid">
+        {% for q in questions %}
+        <button class="q-nav-btn" id="nav-{{ loop.index0 }}" onclick="fortress.navigate_to({{ loop.index0 }})">{{ loop.index }}</button>
+        {% endfor %}
+    </div>
+    <div class="q-nav-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--primary);"></div>Current</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(16,185,129,0.5);border:1px solid var(--success);"></div>Answered</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);"></div>Not answered</div>
+    </div>
+</div>
+
+<div class="exam-wrap" id="examWrap" style="display:none;">
+    <form id="examForm" method="POST" action="{{ url_for('submit_exam', exam_id=exam_id) }}">
+        {% for q in questions %}
+        <div class="q-card" id="q-{{ loop.index0 }}" data-qid="{{ q.id }}">
+            <div class="q-meta">
+                <span class="q-num">Question {{ loop.index }} of {{ questions|length }}</span>
+                <span class="q-marks">{{ q.marks }} Marks</span>
+            </div>
+            <p class="q-text">{{ q.question_text }}</p>
+            {% if q.question_type|lower == "mcq" %}
+            <div class="options">
+                {% for letter, val in [('A','optionA'),('B','optionB'),('C','optionC'),('D','optionD')] %}
+                <label class="opt">
+                    <input type="radio" name="q{{ q.id }}" value="{{ val }}" {% if loop.first %}required{% endif %}>
+                    <span class="opt-marker">{{ letter }}</span>
+                    <span class="opt-text">{{ q[val] }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% elif q.question_type|lower == "msq" %}
+            <div class="options">
+                {% for letter, val in [('A','optionA'),('B','optionB'),('C','optionC'),('D','optionD')] %}
+                <label class="opt">
+                    <input type="checkbox" name="q{{ q.id }}" value="{{ val }}">
+                    <span class="opt-marker">{{ letter }}</span>
+                    <span class="opt-text">{{ q[val] }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% else %}
+            <textarea class="answer-area" name="q{{ q.id }}" placeholder="Type your answer here..."></textarea>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <div class="nav-bar">
+            <button type="button" class="nav-btn nav-prev" id="prevBtn" onclick="fortress.navigate(-1)">← Previous</button>
+            <button type="button" class="nav-btn nav-next" id="nextBtn" onclick="fortress.navigate(1)">Next →</button>
+            <button type="submit" class="nav-btn nav-submit" id="submitBtn" onclick="return fortress.confirmSubmit()">Submit Exam ✓</button>
+        </div>
+    </form>
+</div>
+
+<div class="progress-bar-wrap">
+    <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+</div>
+
+<script>
+// ============================================================
+// FORTRESS EXAM — Production Security Layer v2
+// ============================================================
+class FortressExam {
+    constructor() {
+        this.currentQ      = 0;
+        this.totalQ        = {{ questions|length }};
+        this.warnings      = 0;
+        this.maxWarnings   = 5;
+        this.isActive      = false;
+        this.isSubmitted   = false;
+        this.sessionId     = '{{ session.admission_no }}-{{ exam_id }}-' + Date.now();
+        this.aiProctoring  = {{ 'true' if ai_proctoring else 'false' }};
+        this.examId        = {{ exam_id }};
+
+        // AI proctoring state
+        this.consecutiveAIFails  = 0;
+        this.maxAllowedFails     = 3;   // 3 consecutive fail frames → 1 violation
+        this.totalFrames         = 0;
+        this.cleanFrames         = 0;
+
+        // consecutiveAIFails reset sirf violation count hone ke baad hota hai
+        // clean frames se reset NAHI hota — loop prevent karta hai
+
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = 320; this.canvas.height = 240;
+        this.ctx = this.canvas.getContext('2d');
+        this.abortCtrl = null;
+        this.endTime   = new Date("{{ exam_end }}").getTime();
+
+        document.getElementById('watermark').textContent = this.sessionId;
+    }
+
+    // ── INIT ──
+    async init() {
+        const btn = document.getElementById('startBtn');
+        btn.textContent = 'Initializing...'; btn.disabled = true;
+
+        if (this.aiProctoring) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width:{ideal:640}, height:{ideal:480}, facingMode:'user' },
+                    audio: false
+                });
+                document.getElementById('proctorVideo').srcObject = stream;
+                this._setCheck('chk-cam', true, 'Camera initialized');
+            } catch (err) {
+                this._setCheck('chk-cam', false, 'Camera access denied');
+                alert('Camera access is mandatory for this proctored exam.');
+                btn.textContent = 'Camera Denied'; btn.disabled = false; return;
+            }
+            this._setCheck('chk-sec', true, 'Secure environment verified');
+            this._setCheck('chk-ai',  true, 'AI proctoring active');
+        } else {
+            this._setCheck('chk-cam', true, 'No proctoring required');
+            this._setCheck('chk-sec', true, 'Standard mode active');
+            this._setCheck('chk-ai',  true, 'Ready');
+        }
+
+        setTimeout(() => {
+            document.getElementById('gatekeeper').style.display = 'none';
+            if (this.aiProctoring) document.getElementById('proctorPanel').style.display = 'block';
+            document.getElementById('examWrap').style.display  = 'block';
+            document.getElementById('qNavPanel').style.display = 'block';
+            this.isActive = true;
+            this.showQuestion(0);
+            this._updateNavigator(0);
+            this._attachAnswerListeners();
+            if (window.secureBrowser) window.secureBrowser.examStarted();
+            this.startTimer();
+            if (this.aiProctoring) this.startProctoring();
+            this._attachSecurityListeners();
+        }, 900);
+    }
+
+    _setCheck(id, pass, text) {
+        const el = document.getElementById(id);
+        el.className = 'check-row ' + (pass ? 'done' : 'fail');
+        el.textContent = (pass ? '✓' : '✗') + '  ' + text;
+    }
+
+    // ── TIMER ──
+    startTimer() {
+        const el = document.getElementById('timerDisplay');
+        this.timerInterval = setInterval(() => {
+            const diff = this.endTime - Date.now();
+            if (diff <= 0) { clearInterval(this.timerInterval); this.forceSubmit('Time expired'); return; }
+            const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000), s = Math.floor((diff%60000)/1000);
+            el.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+            if (h===0 && m<5) el.classList.add('critical');
+        }, 1000);
+    }
+
+    // ── PROCTORING ──
+    startProctoring() {
+        this.proctoringInterval = setInterval(() => this._captureFrame(), 3000);
+    }
+
+    async _captureFrame() {
+        if (!this.isActive || this.isSubmitted) return;
+        const video = document.getElementById('proctorVideo');
+        if (!video.readyState || video.readyState < 2) return;
+
+        this.ctx.drawImage(video, 0, 0, 320, 240);
+        const imageData = this.canvas.toDataURL('image/jpeg', 0.55);
+        if (this.abortCtrl) this.abortCtrl.abort();
+        this.abortCtrl = new AbortController();
+
+        try {
+            const res  = await fetch('/detect_cheating', { method:'POST', headers:{'Content-Type':'application/json'}, signal:this.abortCtrl.signal, body:JSON.stringify({image:imageData, session:this.sessionId}) });
+            const data = await res.json();
+            this.totalFrames++;
+
+            if (data.cheating) {
+                const r = (data.reason || '').toLowerCase();
+
+                // ── Phone → IMMEDIATE violation (no grace) ──
+                if (r.includes('phone') || r.includes('mobile')) {
+                    this._setCameraStatus('⚠ ' + data.reason);
+                    this._updateAIStatus('danger', data.reason);
+                    this.logViolation(data.reason, 1);
+                    // Violation ke baad fresh start: fails reset
+                    this.consecutiveAIFails = 0;
+                }
+                else {
+                    // Multiple faces / Face not visible / eyes / gaze —
+                    // sabke liye same [1/3] counter logic
+                    this.consecutiveAIFails++;
+                    this._setCameraStatus('⚠ ' + (data.reason || 'Alert') + ` [${this.consecutiveAIFails}/${this.maxAllowedFails}]`);
+
+                    if (this.consecutiveAIFails >= this.maxAllowedFails) {
+                        // 3 consecutive fails → violation count
+                        this.logViolation(data.reason || 'Suspicious activity', 1);
+                        this._updateAIStatus('danger', data.reason || 'Alert');
+                        this.consecutiveAIFails = 0;
+                    } else {
+                        this._showToast(
+                            `Warning ${this.consecutiveAIFails}/${this.maxAllowedFails}: ${data.reason || 'Face alert'}`,
+                            false
+                        );
+                        this._updateAIStatus('warning', `Violation warning ${this.consecutiveAIFails}/${this.maxAllowedFails}`);
+                    }
+                }
+            } else {
+                // ── Clean frame mila ──
+                // consecutiveAIFails RESET NAHI HOGA clean frame se.
+                // Reset sirf violation count hone ke baad hoga.
+                // Isse student 2-fail + 1-clean + 2-fail loop nahi kar sakta.
+                this.cleanFrames++;
+                this._setCameraStatus('✓ Face detected');
+                this._updateAIStatus('ok', 'Monitoring active');
+            }
+
+            const integrity = this.totalFrames > 0 ? Math.round(this.cleanFrames/this.totalFrames*100) : 100;
+            const fill = document.getElementById('integrityFill');
+            fill.style.width = integrity + '%';
+            fill.style.background = integrity>80 ? 'var(--success)' : integrity>50 ? 'var(--warning)' : 'var(--danger)';
+
+        } catch (e) { if (e.name !== 'AbortError') console.warn('[OEMS] Frame skipped:', e.message); }
+    }
+
+    // FIX: Camera status below camera, not overlaid
+    _setCameraStatus(text) {
+        const el = document.getElementById('cameraStatus');
+        if (el) el.textContent = text;
+    }
+
+    _updateAIStatus(state, msg) {
+        const el = document.getElementById('aiStatus');
+        if (!el) return;
+        const dotClass = state==='danger' ? 'bad' : state==='warning' ? 'warn' : 'ok';
+        const color    = state==='danger' ? 'var(--danger)' : state==='warning' ? 'var(--warning)' : 'var(--success)';
+        const label    = state==='danger' ? 'ALERT' : state==='warning' ? 'WARNING' : 'System Secure';
+        el.className   = 'ai-status ' + (state==='ok' ? '' : state);
+        el.innerHTML   = `<span class="ai-dot ${dotClass}"></span><strong style="color:${color}">${label}</strong><div style="font-size:0.75rem;color:var(--muted);margin-top:3px;">${msg}</div>`;
+    }
+
+    // ══════════════════════════════════════════════════════
+    // VIOLATION LOGGING — DB store + prominent alert box
+    // ══════════════════════════════════════════════════════
+    logViolation(reason, severity = 1) {
+        if (this.isSubmitted) return;
+        this.warnings += severity;
+
+        document.getElementById('violCount').textContent = `${this.warnings}/${this.maxWarnings}`;
+        document.getElementById('violChip').textContent  = `${this.warnings} / ${this.maxWarnings} violations`;
+
+        // ── Show prominent violation alert ──
+        this._showViolationAlert(reason, this.warnings);
+
+        // ── Store in DB ──
+        fetch('/log_violation', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ exam_id: this.examId, type: 'exam_violation', details: reason })
+        }).catch(() => {});
+
+        // Electron IPC
+        if (window.secureBrowser && window.secureBrowser.reportViolation) {
+            window.secureBrowser.reportViolation('exam_violation', reason);
+        }
+
+        // Beep sound
+        try {
+            const ctx=new AudioContext(), osc=ctx.createOscillator(), gain=ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value=880;
+            gain.gain.setValueAtTime(0.3,ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
+            osc.start(); osc.stop(ctx.currentTime+0.4);
+        } catch(e) {}
+
+        if (this.warnings >= this.maxWarnings) {
+            // Store termination event
+            fetch('/log_violation', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ exam_id: this.examId, type: 'force_terminate', details: 'Maximum violations reached — exam terminated' })
+            }).catch(() => {});
+            setTimeout(() => this.forceSubmit('Maximum violations reached — exam terminated'), 2200);
+        }
+    }
+
+    // ── Prominent Violation Alert Box ──
+    _showViolationAlert(reason, count) {
+        const alertDiv = document.getElementById('violationAlert');
+        const box      = document.getElementById('vaBox');
+        const icon     = document.getElementById('vaIcon');
+        const title    = document.getElementById('vaTitle');
+        const detail   = document.getElementById('vaDetail');
+        const numEl    = document.getElementById('vaNum');
+
+        const r = (reason || '').toLowerCase();
+        let alertIcon  = '🚨', alertTitle = 'SECURITY VIOLATION', alertDetail = reason;
+        let isWarning  = count <= 2;
+
+        if (r.includes('phone') || r.includes('mobile')) {
+            alertIcon = '📱'; alertTitle = 'MOBILE PHONE DETECTED';
+            alertDetail = 'A mobile phone was detected in your camera frame. Remove it immediately.';
+            isWarning = false;
+        } else if (r.includes('multiple') || r.includes('faces')) {
+            alertIcon = '👥'; alertTitle = 'MULTIPLE FACES DETECTED';
+            alertDetail = 'More than one person is visible. Only the exam candidate should be in frame.';
+            isWarning = false;
+        } else if (r.includes('face not') || r.includes('not visible')) {
+            alertIcon = '👤'; alertTitle = 'FACE NOT VISIBLE';
+            alertDetail = 'Your face is not visible. Look directly at the camera.';
+        } else if (r.includes('eyes')) {
+            alertIcon = '👁'; alertTitle = 'EYES NOT VISIBLE';
+            alertDetail = 'Your eyes are not detected. Face the camera directly.';
+        } else if (r.includes('looking right')) {
+            alertIcon = '👀'; alertTitle = 'LOOKING AWAY — RIGHT';
+            alertDetail = 'You are looking to the right. Keep your gaze on the screen.';
+        } else if (r.includes('looking left')) {
+            alertIcon = '👀'; alertTitle = 'LOOKING AWAY — LEFT';
+            alertDetail = 'You are looking to the left. Keep your gaze on the screen.';
+        } else if (r.includes('looking up')) {
+            alertIcon = '🔼'; alertTitle = 'LOOKING UP';
+            alertDetail = 'You are looking upward. Keep your gaze on the screen.';
+        } else if (r.includes('looking down')) {
+            alertIcon = '🔽'; alertTitle = 'LOOKING DOWN';
+            alertDetail = 'You are looking downward. Keep your gaze on the screen.';
+        } else if (r.includes('tab') || r.includes('switch') || r.includes('minimized')) {
+            alertIcon = '🔄'; alertTitle = 'TAB SWITCH DETECTED';
+            alertDetail = 'Switching tabs or minimizing the window is not allowed.';
+            isWarning = false;
+        } else if (r.includes('print')) {
+            alertIcon = '🖨️'; alertTitle = 'PRINT ATTEMPT BLOCKED';
+            alertDetail = 'Attempting to print during exam is prohibited.';
+            isWarning = false;
+        } else if (r.includes('developer') || r.includes('devtool')) {
+            alertIcon = '🛠'; alertTitle = 'DEVELOPER TOOLS DETECTED';
+            alertDetail = 'Developer tools are not allowed during exam.';
+            isWarning = false;
+        }
+
+        icon.textContent  = alertIcon;
+        title.textContent = alertTitle;
+        detail.textContent= alertDetail;
+        numEl.textContent = count;
+
+        // Color theme
+        if (isWarning) {
+            box.className   = 'va-box warn-level';
+            title.className = 'va-title warn-level';
+            numEl.className = 'va-num warn-level';
+        } else {
+            box.className   = 'va-box';
+            title.className = 'va-title';
+            numEl.className = 'va-num';
+        }
+
+        alertDiv.classList.add('show');
+        clearTimeout(this._vaTimer);
+        this._vaTimer = setTimeout(() => alertDiv.classList.remove('show'), 4500);
+    }
+
+    _showToast(message, isCritical = false) {
+        const toast = document.getElementById('alertToast');
+        document.getElementById('alertIcon').textContent = isCritical ? '🚨' : '👀';
+        document.getElementById('alertText').textContent = message;
+        toast.className = 'alert-toast show' + (isCritical ? ' critical' : '');
+        clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => toast.classList.remove('show'), isCritical ? 4000 : 2500);
+    }
+
+    // ── NAVIGATION ──
+    showQuestion(idx) {
+        document.querySelectorAll('.q-card').forEach(q => q.classList.remove('active'));
+        document.getElementById(`q-${idx}`).classList.add('active');
+        document.getElementById('prevBtn').style.visibility = idx===0 ? 'hidden' : 'visible';
+        const isLast = idx===this.totalQ-1;
+        document.getElementById('nextBtn').style.display   = isLast ? 'none' : 'flex';
+        document.getElementById('submitBtn').style.display = isLast ? 'flex' : 'none';
+        document.getElementById('progressFill').style.width = ((idx+1)/this.totalQ*100) + '%';
+        this.currentQ = idx;
+        this._updateNavigator(idx);
+    }
+
+    navigate(dir)    { const n=this.currentQ+dir; if(n>=0&&n<this.totalQ) this.showQuestion(n); }
+    navigate_to(idx) { if(idx>=0&&idx<this.totalQ) this.showQuestion(idx); }
+
+    _updateNavigator(idx) {
+        document.querySelectorAll('.q-nav-btn').forEach((btn,i) => {
+            btn.classList.remove('current');
+            if (i===idx) btn.classList.add('current');
+        });
+    }
+
+    _attachAnswerListeners() {
+        document.querySelectorAll('.opt input').forEach(input => {
+            input.addEventListener('change', () => {
+                const qCard=input.closest('.q-card'); if(!qCard) return;
+                const btn=document.getElementById(`nav-${parseInt(qCard.id.replace('q-',''))}`);
+                if (btn) btn.classList.add('answered');
+            });
+        });
+        document.querySelectorAll('.answer-area').forEach(textarea => {
+            textarea.addEventListener('input', () => {
+                const qCard=textarea.closest('.q-card'); if(!qCard) return;
+                const btn=document.getElementById(`nav-${parseInt(qCard.id.replace('q-',''))}`);
+                if (btn) { if(textarea.value.trim().length>0) btn.classList.add('answered'); else btn.classList.remove('answered'); }
+            });
+        });
+    }
+
+    // ── SUBMIT ──
+    confirmSubmit() {
+        if (!confirm('⚠️ FINAL SUBMISSION\n\nAre you sure? This cannot be undone.')) return false;
+        this.isSubmitted = true;
+        if (window.secureBrowser && window.secureBrowser.submitExam) window.secureBrowser.submitExam();
+        return true;
+    }
+
+    forceSubmit(reason) {
+        if (this.isSubmitted) return;
+        this.isSubmitted = true; this.isActive = false;
+        clearInterval(this.proctoringInterval); clearInterval(this.timerInterval);
+        document.getElementById('termReason').textContent = reason;
+        document.getElementById('termSid').textContent    = 'Session: ' + this.sessionId;
+        document.getElementById('terminationOverlay').style.display = 'flex';
+        if (window.secureBrowser && window.secureBrowser.reportViolation) window.secureBrowser.reportViolation('force_terminate', reason);
+        setTimeout(() => document.getElementById('examForm').submit(), 3000);
+    }
+
+    // ── SECURITY LISTENERS ──
+    _attachSecurityListeners() {
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.isActive && !this.isSubmitted)
+                this.logViolation('Tab switch / window minimized detected', 1);
+        });
+
+        window.addEventListener('blur', () => {
+            if (this.isActive && !this.isSubmitted)
+                this._showToast('Focus lost — stay on exam window', false);
+        });
+
+        document.addEventListener('keydown', (e) => {
+            // Block developer/cheat shortcuts
+            const blocked = [
+                e.ctrlKey  && e.shiftKey && (e.key==='I'||e.key==='J'||e.key==='C'),
+                e.ctrlKey  && (e.key==='u'||e.key==='p'||e.key==='s'),
+                e.metaKey  && (e.key==='r'||e.key==='R'||e.key==='p'||e.key==='s'),
+                e.ctrlKey  && (e.key==='r'||e.key==='R'),
+                e.key === 'F12',
+                e.key === 'F5',
+            ];
+            if (blocked.some(Boolean)) {
+                e.preventDefault();
+                e.stopPropagation();
+                this._showToast('Keyboard shortcut blocked during exam', false);
+                return false;
+            }
+        }, true);
+
+        window.addEventListener('beforeprint', e => { e.preventDefault(); this.logViolation('Print attempt detected', 1); });
+
+        // DevTools detection — threshold 200px (not 160)
+        // 160 was triggering on external monitors / browser toolbars
+        // Also: must flag on 2 CONSECUTIVE checks (debounce) to avoid
+        // single-frame false positives during window resize
+        let _devToolsFlagCount = 0;
+        const devToolsCheck = setInterval(() => {
+            if (!this.isActive || this.isSubmitted) {
+                clearInterval(devToolsCheck); return;
+            }
+            const wDiff = window.outerWidth  - window.innerWidth;
+            const hDiff = window.outerHeight - window.innerHeight;
+            if (wDiff > 200 || hDiff > 200) {
+                _devToolsFlagCount++;
+                // Require 2 consecutive hits before flagging (debounce)
+                if (_devToolsFlagCount >= 2) {
+                    this.logViolation('Developer tools may be open', 1);
+                    _devToolsFlagCount = 0;
+                }
+            } else {
+                _devToolsFlagCount = 0; // reset on clean check
+            }
+        }, 5000);
+
+        if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(()=>{});
+            document.addEventListener('fullscreenchange', () => {
+                if (!document.fullscreenElement&&this.isActive&&!this.isSubmitted) {
+                    this._showToast('Please stay in fullscreen mode', false);
+                    setTimeout(()=>document.documentElement.requestFullscreen().catch(()=>{}), 1000);
+                }
+            });
+        }
+
+        // Uncomment for production:
+        // document.addEventListener('contextmenu', e=>e.preventDefault());
+        // document.addEventListener('copy',  e=>e.preventDefault());
+        // document.addEventListener('cut',   e=>e.preventDefault());
+        // document.addEventListener('paste', e=>e.preventDefault());
+    }
+}
+
+// ── OPTION CARD SELECTION ──
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.opt input').forEach(input => {
+        input.addEventListener('change', function() {
+            const card = this.closest('.opt');
+            if (this.type==='radio') {
+                card.closest('.options').querySelectorAll('.opt').forEach(c=>c.classList.remove('selected'));
+                card.classList.add('selected');
+            } else { card.classList.toggle('selected', this.checked); }
+        });
+    });
+});
+
+const fortress = new FortressExam();
+</script>
+</body>
+</html>

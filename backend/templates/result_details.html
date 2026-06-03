@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Answer Details · ExamOS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background-color: #f4f7f6;
+            color: #333333;
+            min-height: 100vh;
+            padding: 2rem;
+            background-image: radial-gradient(circle at top right, #eef2f3, transparent 40%),
+                              radial-gradient(circle at bottom left, #e0eafc, transparent 40%);
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            animation: fadeIn 0.8s ease-in-out;
+        }
+
+        /* Header Section */
+        .header-section {
+            margin-bottom: 3rem;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem; 
+        }
+
+        .header-text-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header-title {
+            font-size: 2.5rem; 
+            font-weight: 600;
+            color: #2c3e50;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            line-height: 1.2;
+        }
+
+        .header-subtitle {
+            color: #6c757d;
+            font-size: 0.95rem;
+            margin-top: 5px;
+        }
+
+        .back-btn {
+            display: inline-block;
+            color: #555555;
+            text-decoration: none;
+            font-size: 1rem;
+            border: 1px solid #cccccc;
+            padding: 10px 25px;
+            border-radius: 25px;
+            transition: 0.3s;
+            background: white;
+            white-space: nowrap;
+        }
+
+        .back-btn:hover {
+            background: #f0f0f0;
+            color: #111111;
+            border-color: #aaaaaa;
+        }
+
+        .split-line {
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #007bff, #00c6ff, #007bff, transparent);
+            box-shadow: 0 0 10px rgba(0, 123, 255, 0.4);
+            animation: glowingLine 2s infinite alternate;
+        }
+
+        /* Glassmorphism Table Container */
+        .table-wrapper {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-radius: 15px;
+            padding: 1.5rem;
+            overflow-x: auto;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            background: rgba(0, 123, 255, 0.05);
+            color: #0056b3;
+            padding: 1rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            border-bottom: 2px solid #e9ecef;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid #e9ecef;
+            color: #495057;
+            vertical-align: top;
+        }
+
+        tr:hover td {
+            background: rgba(0, 123, 255, 0.02);
+            transition: 0.3s;
+        }
+
+        /* ID Badge Styling */
+        .soft-badge { padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; display: inline-block;}
+        .badge-id { background: #e3f2fd; color: #007bff; font-family: 'Consolas', monospace; }
+
+        /* MONOSPACE Content Boxes */
+        .content-box {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            border: 1px solid #e9ecef;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            color: #333333;
+            font-family: 'Consolas', 'Courier New', monospace; 
+        }
+
+        .question-text {
+            font-weight: 500;
+            color: #2c3e50;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        /* Soft Score Badge */
+        .score-badge {
+            display: inline-block;
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            text-align: center;
+            white-space: nowrap; 
+        }
+
+        .score-high { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+        .score-medium { background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
+        .score-low { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+        .score-pending { background: #f3e8ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes glowingLine {
+            from { opacity: 0.6; box-shadow: 0 0 5px rgba(0, 123, 255, 0.3); }
+            to { opacity: 1; box-shadow: 0 0 12px rgba(0, 198, 255, 0.6); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            .header-title { font-size: 1.8rem; }
+            body { padding: 1rem; }
+            .table-wrapper { padding: 1rem; }
+            td, th { padding: 0.8rem; font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        
+        <div class="header-section">
+            <div class="header-content">
+                <div class="header-text-group">
+                    <h1 class="header-title">Answer Details</h1>
+                    <p class="header-subtitle">Comprehensive view of student responses & AI evaluation</p>
+                </div>
+                <a href="/results" class="back-btn">← Back to Results</a>
+            </div>
+            <div class="split-line"></div>
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">Ans ID</th>
+                        <th style="width: 25%;">Question</th>
+                        <th style="width: 30%;">Student Answer</th>
+                        <th style="width: 10%;">Score</th>
+                        <th style="width: 30%;">Feedback</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if answers and answers|length > 0 %}
+                        {% for a in answers %}
+                        <tr>
+                            <td>
+                                <span class="soft-badge badge-id">#{{ a.id }}</span>
+                            </td>
+                            <td>
+                                <div class="question-text">{{ a.question_text }}</div>
+                            </td>
+                            <td>
+                                <div class="content-box">{{ a.student_answer or 'No answer provided' }}</div>
+                            </td>
+                            <td>
+                                {% if a.score is none %}
+                                    <div class="score-badge score-pending">Pending</div>
+                                {% else %}
+                                    {% set score = a.score|float %}
+                                    <div class="score-badge {% if score >= (a.marks|float * 0.8) %}score-high{% elif score >= (a.marks|float * 0.5) %}score-medium{% else %}score-low{% endif %}">
+                                        {{ "%.1f"|format(score) }} / {{ a.marks }}
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="content-box">{{ a.feedback or 'Pending evaluation' }}</div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #888888; padding: 3rem;">
+                                <div>No answers found for this student.</div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+</body>
+</html>

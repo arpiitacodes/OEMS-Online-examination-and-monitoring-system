@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Identity Verification</title>
+    <style>
+        :root {
+            --bg-1: #0b1733;
+            --bg-2: #122a5e;
+            --panel: rgba(255, 255, 255, 0.06);
+            --panel-solid: #ffffff;
+            --ink: #eaf1ff;
+            --ink-dark: #0f1b35;
+            --muted: #9fb3d8;
+            --line: rgba(255, 255, 255, 0.14);
+            --primary: #3b82f6;
+            --primary-2: #6366f1;
+            --good: #22c55e;
+            --warn: #f59e0b;
+            --bad: #ef4444;
+            --ring: #64748b;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(900px 600px at 12% -10%, #1d3a82 0%, transparent 55%),
+                radial-gradient(900px 600px at 100% 110%, #20275e 0%, transparent 58%),
+                linear-gradient(160deg, var(--bg-1), var(--bg-2));
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+        }
+        .card {
+            width: min(940px, 100%);
+            display: grid;
+            grid-template-columns: 1.25fr 1fr;
+            gap: 0;
+            border-radius: 22px;
+            overflow: hidden;
+            background: rgba(10, 20, 45, 0.55);
+            border: 1px solid var(--line);
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(14px);
+        }
+        /* ── Left: camera ── */
+        .stage {
+            position: relative;
+            padding: 26px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .brand .logo {
+            width: 30px; height: 30px;
+            border-radius: 9px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            display: grid; place-items: center;
+            font-size: 15px;
+        }
+        .brand small { display: block; font-weight: 500; color: var(--muted); font-size: 11px; }
+
+        .cam-wrap {
+            position: relative;
+            aspect-ratio: 4 / 3;
+            border-radius: 18px;
+            overflow: hidden;
+            background: #060c1c;
+            display: grid;
+            place-items: center;
+        }
+        video {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        /* Animated detection ring */
+        .ring {
+            position: relative;
+            width: 66%;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            border: 3px solid var(--ring);
+            box-shadow: 0 0 0 9999px rgba(4, 9, 22, 0.45);
+            transition: border-color .35s ease, box-shadow .35s ease;
+            z-index: 2;
+        }
+        .ring::before {
+            content: "";
+            position: absolute; inset: -10px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+        }
+        .ring.searching { border-color: var(--ring); }
+        .ring.aligning  { border-color: var(--warn); animation: breathe 1.4s ease-in-out infinite; }
+        .ring.locked    { border-color: var(--primary); animation: breathe 1.1s ease-in-out infinite; }
+        .ring.scanning  { border-color: var(--primary); }
+        .ring.success   { border-color: var(--good); animation: none; }
+        .ring.error     { border-color: var(--bad); }
+        @keyframes breathe {
+            0%,100% { box-shadow: 0 0 0 9999px rgba(4,9,22,.45), 0 0 12px rgba(59,130,246,.4); }
+            50%     { box-shadow: 0 0 0 9999px rgba(4,9,22,.45), 0 0 26px rgba(59,130,246,.8); }
+        }
+        /* Sweeping scan line while capturing */
+        .scanline {
+            position: absolute;
+            left: 17%; right: 17%;
+            height: 3px;
+            border-radius: 3px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0;
+            z-index: 3;
+            box-shadow: 0 0 14px var(--primary);
+        }
+        .cam-wrap.is-scanning .scanline { opacity: 1; animation: sweep 1.6s linear infinite; }
+        @keyframes sweep {
+            0%   { top: 20%; } 50% { top: 80%; } 100% { top: 20%; }
+        }
+        /* Success checkmark overlay */
+        .done-overlay {
+            position: absolute; inset: 0;
+            display: grid; place-items: center;
+            background: rgba(6, 12, 26, 0.72);
+            opacity: 0; pointer-events: none;
+            transition: opacity .35s ease;
+            z-index: 5;
+        }
+        .done-overlay.show { opacity: 1; }
+        .check {
+            width: 92px; height: 92px;
+            border-radius: 50%;
+            background: var(--good);
+            display: grid; place-items: center;
+            transform: scale(0);
+            animation: pop .45s cubic-bezier(.2,.9,.3,1.3) forwards;
+        }
+        .check.bad { background: var(--bad); }
+        @keyframes pop { to { transform: scale(1); } }
+        .check svg { width: 46px; height: 46px; }
+
+        .overlay-msg {
+            position: absolute;
+            left: 14px; right: 14px; bottom: 14px;
+            z-index: 4;
+            text-align: center;
+            font-size: 13.5px;
+            font-weight: 600;
+            padding: 9px 12px;
+            border-radius: 11px;
+            background: rgba(7, 14, 30, 0.7);
+            border: 1px solid var(--line);
+            backdrop-filter: blur(6px);
+        }
+
+        .progress {
+            height: 7px;
+            border-radius: 99px;
+            background: rgba(255,255,255,.1);
+            overflow: hidden;
+        }
+        .progress > i {
+            display: block; height: 100%; width: 0%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, var(--primary), var(--primary-2));
+            transition: width .3s ease;
+        }
+
+        /* ── Right: info panel ── */
+        .info {
+            background: var(--panel-solid);
+            color: var(--ink-dark);
+            padding: 30px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+        .info h1 { margin: 0; font-size: 23px; letter-spacing: -.3px; }
+        .info .who {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 13px; color: #475569;
+        }
+        .pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #eef2ff; color: #4338ca;
+            border: 1px solid #c7d2fe;
+            border-radius: 99px; padding: 5px 11px;
+            font-size: 12px; font-weight: 700;
+            width: fit-content;
+        }
+        .steps { display: grid; gap: 10px; margin-top: 2px; }
+        .step {
+            display: flex; gap: 11px; align-items: flex-start;
+            font-size: 13.5px; color: #334155;
+            transition: opacity .3s;
+        }
+        .step .n {
+            flex-shrink: 0;
+            width: 24px; height: 24px; border-radius: 50%;
+            background: #e2e8f0; color: #64748b;
+            display: grid; place-items: center;
+            font-size: 12px; font-weight: 800;
+            transition: all .3s;
+        }
+        .step.active .n { background: var(--primary); color: #fff; box-shadow: 0 0 0 4px rgba(59,130,246,.18); }
+        .step.complete .n { background: var(--good); color: #fff; }
+        .step.complete span { color: #94a3b8; text-decoration: line-through; }
+
+        .statusline {
+            margin-top: auto;
+            border-top: 1px solid #eef1f6;
+            padding-top: 16px;
+            display: flex; align-items: center; gap: 10px;
+            font-size: 13.5px; color: #334155; font-weight: 600;
+            min-height: 24px;
+        }
+        .spinner {
+            width: 16px; height: 16px; border-radius: 50%;
+            border: 2.5px solid #dbe3ef; border-top-color: var(--primary);
+            animation: spin .8s linear infinite; flex-shrink: 0;
+        }
+        .spinner.hidden { display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .secondary {
+            display: flex; gap: 8px;
+        }
+        .secondary button {
+            flex: 1;
+            border: 1px solid #e2e8f0; background: #f8fafc;
+            color: #475569; font-weight: 600; font-size: 13px;
+            border-radius: 10px; padding: 10px; cursor: pointer;
+            transition: background .2s;
+        }
+        .secondary button:hover { background: #eef2f7; }
+        .footnote { font-size: 11.5px; color: #94a3b8; line-height: 1.5; }
+
+        @media (max-width: 820px) {
+            .card { grid-template-columns: 1fr; }
+            .info { order: 2; }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <!-- Camera stage -->
+        <section class="stage">
+            <div class="brand">
+                <span class="logo">🛡️</span>
+                <div>OEMS Secure Login
+                    <small>Facial identity checkpoint</small>
+                </div>
+            </div>
+
+            <div class="cam-wrap" id="camWrap">
+                <video id="video" autoplay playsinline muted></video>
+                <div class="ring searching" id="ring"></div>
+                <div class="scanline"></div>
+                <div class="overlay-msg" id="overlayMsg">Starting camera…</div>
+                <div class="done-overlay" id="doneOverlay">
+                    <div class="check" id="checkMark">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <path id="checkPath" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="progress"><i id="progressBar"></i></div>
+        </section>
+
+        <!-- Info panel -->
+        <aside class="info">
+            <span class="pill" id="modePill">
+                {% if face_mode == "register" %}● First-time face setup{% else %}● Face match login{% endif %}
+            </span>
+            <div>
+                <h1>{% if face_mode == "register" %}Set up Face ID{% else %}Verify it's you{% endif %}</h1>
+                <p class="who">{{ student_name }} &middot; {{ admission_no }}</p>
+            </div>
+
+            <div class="steps" id="steps">
+                <div class="step" data-step="0"><span class="n">1</span><span>Allow camera access</span></div>
+                <div class="step" data-step="1"><span class="n">2</span><span>Center your face in the circle, good lighting</span></div>
+                <div class="step" data-step="2"><span class="n">3</span><span id="livenessStep">Blink or gently turn your head</span></div>
+                <div class="step" data-step="3"><span class="n">4</span>
+                    <span>{% if face_mode == "register" %}Face saved — then log in again{% else %}Match confirmed — open dashboard{% endif %}</span>
+                </div>
+            </div>
+
+            <div class="secondary">
+                <button id="retryBtn" type="button">Restart camera</button>
+                <button id="cancelBtn" type="button">Cancel</button>
+            </div>
+
+            <p class="footnote">Verification runs automatically — no buttons to press.
+                Your face is encrypted and never leaves this institution's server.</p>
+
+            <div class="statusline">
+                <span class="spinner" id="spinner"></span>
+                <span id="statusText">Initializing…</span>
+            </div>
+        </aside>
+    </div>
+
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+    (function () {
+        "use strict";
+        const FACE_MODE = "{{ face_mode }}";
+        const ENGINE_READY = {{ 'true' if engine_ready else 'false' }};
+        const FRAME_INTERVAL_MS = 280;          // ~3.5 fps to the server
+        const CAPTURE_W = 640, CAPTURE_H = 480;
+
+        const el = (id) => document.getElementById(id);
+        const video = el("video"), canvas = el("canvas");
+        const ring = el("ring"), camWrap = el("camWrap");
+        const overlayMsg = el("overlayMsg"), statusText = el("statusText");
+        const spinner = el("spinner"), progressBar = el("progressBar");
+        const doneOverlay = el("doneOverlay"), checkMark = el("checkMark");
+
+        let stream = null, loopTimer = null, busy = false, finished = false;
+        let consecutiveErrors = 0;
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        canvas.width = CAPTURE_W; canvas.height = CAPTURE_H;
+
+        function setRing(cls) { ring.className = "ring " + cls; }
+        function setStatus(txt, showSpinner) {
+            statusText.textContent = txt;
+            spinner.classList.toggle("hidden", !showSpinner);
+        }
+        function setOverlay(txt) { overlayMsg.textContent = txt; }
+        function setProgress(pct) { progressBar.style.width = Math.max(0, Math.min(100, pct)) + "%"; }
+
+        function markStep(idx, state) {
+            document.querySelectorAll(".step").forEach((s) => {
+                const i = Number(s.dataset.step);
+                s.classList.toggle("active", i === idx && state !== "complete");
+                if (i < idx) s.classList.add("complete");
+                if (i === idx && state === "complete") s.classList.add("complete");
+            });
+        }
+
+        function showResult(success, msg) {
+            finished = true;
+            stopLoop();
+            camWrap.classList.remove("is-scanning");
+            checkMark.classList.toggle("bad", !success);
+            if (!success) el("checkPath").setAttribute("d", "M6 6l12 12M18 6L6 18");
+            doneOverlay.classList.add("show");
+            setRing(success ? "success" : "error");
+            setOverlay(msg);
+            setStatus(msg, false);
+            setProgress(success ? 100 : 0);
+        }
+
+        function captureFrame() {
+            if (!video.videoWidth) return null;
+            // Mirror to match the preview the user sees.
+            ctx.save();
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, -CAPTURE_W, 0, CAPTURE_W, CAPTURE_H);
+            ctx.restore();
+            return canvas.toDataURL("image/jpeg", 0.82);
+        }
+
+        // Map server state -> ring style + step highlight.
+        function applyState(state, data) {
+            switch (state) {
+                case "no_face":
+                    setRing("searching"); markStep(1, "active"); camWrap.classList.remove("is-scanning"); break;
+                case "too_far":
+                case "blurry":
+                    setRing("aligning"); markStep(1, "active"); camWrap.classList.remove("is-scanning"); break;
+                case "multiple_faces":
+                    setRing("error"); markStep(1, "active"); camWrap.classList.remove("is-scanning"); break;
+                case "scanning":
+                    if (data && data.liveness_ok) {
+                        setRing("scanning"); camWrap.classList.add("is-scanning"); markStep(2, "complete");
+                        const pct = Math.round((Math.min(data.captured, data.target) / data.target) * 100);
+                        setProgress(pct);
+                    } else {
+                        setRing("locked"); markStep(2, "active"); camWrap.classList.remove("is-scanning");
+                        setProgress(15);
+                    }
+                    break;
+                case "mismatch":
+                    setRing("aligning"); camWrap.classList.remove("is-scanning"); setProgress(0); break;
+                default:
+                    setRing("locked");
+            }
+        }
+
+        async function tick() {
+            if (busy || finished || !stream) return;
+            const image = captureFrame();
+            if (!image) return;
+            busy = true;
+            try {
+                const res = await fetch("/student_face_frame", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ image })
+                });
+                const data = await res.json();
+                consecutiveErrors = 0;
+
+                if (res.status === 401) { showResult(false, data.message || "Session expired."); setTimeout(() => location.href = "/", 1600); return; }
+                if (res.status === 503) { showResult(false, data.message || "Face engine unavailable."); return; }
+
+                // Terminal outcomes
+                if (data.done && data.relogin) {
+                    showResult(true, data.message || "Face registered. Please log in again.");
+                    setTimeout(() => location.href = "/", 1900); return;
+                }
+                if (data.done && data.redirect) {
+                    showResult(true, data.message || "Verified. Redirecting…");
+                    setTimeout(() => location.href = data.redirect, 1100); return;
+                }
+                if (data.done && (data.state === "duplicate" || data.state === "not_registered")) {
+                    showResult(false, data.message); return;
+                }
+
+                // In-progress states
+                applyState(data.state, data);
+                setOverlay(data.message || "Hold steady…");
+                if (data.state === "scanning") {
+                    setStatus(data.liveness_ok ? "Capturing your face…" : "Confirming you're live…", true);
+                    el("livenessStep").textContent = data.liveness_ok ? "Liveness confirmed ✓" : "Blink or gently turn your head";
+                } else if (data.state === "mismatch") {
+                    setStatus("No match yet — keep your face centered.", true);
+                } else {
+                    setStatus(data.message || "Looking for your face…", true);
+                }
+            } catch (err) {
+                consecutiveErrors += 1;
+                if (consecutiveErrors >= 5) setStatus("Network issue — retrying…", true);
+            } finally {
+                busy = false;
+            }
+        }
+
+        function startLoop() {
+            stopLoop();
+            loopTimer = setInterval(tick, FRAME_INTERVAL_MS);
+        }
+        function stopLoop() { if (loopTimer) { clearInterval(loopTimer); loopTimer = null; } }
+
+        function stopCamera() {
+            stopLoop();
+            if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+        }
+
+        async function startCamera() {
+            finished = false;
+            doneOverlay.classList.remove("show");
+            el("checkPath").setAttribute("d", "M5 13l4 4L19 7");
+            checkMark.classList.remove("bad");
+            setProgress(0);
+            stopCamera();
+            markStep(0, "active");
+            setRing("searching");
+            setStatus("Requesting camera access…", true);
+            setOverlay("Allow camera access to continue.");
+
+            if (!ENGINE_READY) {
+                setRing("error");
+                showResult(false, "Face engine is starting up. Please retry in a moment.");
+                return;
+            }
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 960 }, height: { ideal: 720 }, facingMode: "user" },
+                    audio: false
+                });
+                video.srcObject = stream;
+                await new Promise((r) => { video.onloadedmetadata = () => { video.play(); r(); }; });
+                markStep(1, "active");
+                setRing("searching");
+                setStatus("Center your face in the circle.", true);
+                setOverlay("Center your face in the circle.");
+                startLoop();
+            } catch (err) {
+                setRing("error");
+                const denied = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
+                showResult(false, denied
+                    ? "Camera permission denied. Enable it and restart."
+                    : "Could not access the camera. Restart to retry.");
+            }
+        }
+
+        el("retryBtn").addEventListener("click", startCamera);
+        el("cancelBtn").addEventListener("click", () => { stopCamera(); location.href = "/"; });
+        window.addEventListener("beforeunload", stopCamera);
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) stopLoop();
+            else if (stream && !finished) startLoop();
+        });
+
+        startCamera();
+    })();
+    </script>
+</body>
+</html>

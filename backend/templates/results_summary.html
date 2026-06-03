@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS · Results Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        body { background-color: #f4f7f6; color: #333; min-height: 100vh; padding: 2rem;
+               background-image: radial-gradient(circle at top right, #eef2f3, transparent 40%),
+                                 radial-gradient(circle at bottom left, #e0eafc, transparent 40%); }
+        .dashboard-container { max-width: 1300px; margin: 0 auto; animation: fadeIn 0.8s ease-in-out; }
+
+        /* Header */
+        .header-section { margin-bottom: 2.5rem; }
+        .header-content { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .header-title { font-size: 2.2rem; font-weight: 600; color: #2c3e50; text-transform: uppercase; letter-spacing: 2px; }
+        .back-btn { display: inline-block; color: #555; text-decoration: none; font-size: 0.95rem; border: 1px solid #ccc; padding: 9px 22px; border-radius: 25px; transition: 0.3s; background: white; font-weight: 500; }
+        .back-btn:hover { background: #f0f0f0; color: #111; border-color: #aaa; }
+        .split-line { width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #007bff, #00c6ff, #007bff, transparent); animation: glowingLine 2s infinite alternate; }
+
+        /* Stats */
+        .stats-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-pill { background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px; padding: 1rem 1.2rem; text-align: center; box-shadow: 0 4px 15px rgba(31,38,135,0.05); }
+        .stat-pill-val { font-size: 1.7rem; font-weight: 600; color: #2c3e50; }
+        .stat-pill-lbl { font-size: 0.75rem; color: #6c757d; font-weight: 500; margin-top: 2px; }
+
+        /* Toolbar */
+        .toolbar { display: flex; gap: 12px; margin-bottom: 1.2rem; flex-wrap: wrap; align-items: center; }
+        .search-box { flex: 1; min-width: 200px; padding: 9px 14px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.9rem; font-family: 'Poppins', sans-serif; background: white; outline: none; transition: 0.2s; }
+        .search-box:focus { border-color: #007bff; box-shadow: 0 0 0 3px rgba(0,123,255,0.08); }
+        .filter-select { padding: 9px 14px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.9rem; font-family: 'Poppins', sans-serif; background: white; outline: none; cursor: pointer; }
+
+        /* Table */
+        .table-wrapper { background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.05); border-radius: 15px; overflow-x: auto; box-shadow: 0 8px 32px rgba(31,38,135,0.07); }
+        .table-header { padding: 1.2rem 1.5rem; border-bottom: 1px solid #e9ecef; display: flex; justify-content: space-between; align-items: center; }
+        .table-title { font-size: 1.05rem; font-weight: 600; color: #2c3e50; }
+        .record-count { font-size: 0.82rem; color: #6c757d; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background: rgba(0,123,255,0.05); color: #0056b3; padding: 0.9rem 1rem; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid #e9ecef; white-space: nowrap; font-size: 0.85rem; cursor: pointer; user-select: none; }
+        th:hover { background: rgba(0,123,255,0.1); }
+        th.sorted-asc::after  { content: ' ↑'; }
+        th.sorted-desc::after { content: ' ↓'; }
+        td { padding: 0.85rem 1rem; border-bottom: 1px solid #e9ecef; color: #495057; vertical-align: middle; font-size: 0.85rem; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(0,123,255,0.02); }
+
+        /* Highlight hold rows */
+        tr.row-hold td { background: rgba(245,158,11,0.06); }
+        tr.row-hold:hover td { background: rgba(245,158,11,0.1); }
+        tr.row-disq td { background: rgba(239,68,68,0.04); }
+
+        /* Score badges */
+        .score-badge { padding: 4px 12px; border-radius: 20px; font-weight: 600; font-size: 0.82rem; display: inline-block; }
+        .score-high   { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+        .score-mid    { background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
+        .score-low    { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+        .score-pending{ background: #f3e8ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+
+        /* Status badges */
+        .status-badge { padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; display: inline-block; white-space: nowrap; }
+        .status-eval  { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+        .status-pend  { background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
+        .status-await { background: #f3e8ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+        .status-hold  { background: #fff8e1; color: #b45309; border: 2px solid #fcd34d; }
+        .status-disq  { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+
+        /* Action buttons */
+        .btn-view { display: inline-block; text-decoration: none; color: #fff; background: linear-gradient(45deg, #007bff, #00c6ff); padding: 5px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 500; transition: 0.3s; white-space: nowrap; }
+        .btn-view:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,123,255,0.35); color: white; }
+
+        /* Hold action buttons */
+        .btn-release { background: #e8f5e9; color: #2e7d32; border: none; padding: 5px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: 0.2s; font-family: 'Poppins', sans-serif; margin-right: 4px; white-space: nowrap; }
+        .btn-release:hover { background: #2e7d32; color: white; }
+        .btn-disq { background: #ffebee; color: #c62828; border: none; padding: 5px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: 0.2s; font-family: 'Poppins', sans-serif; white-space: nowrap; }
+        .btn-disq:hover { background: #c62828; color: white; }
+        .btn-reeval { background:#eef2ff; color:#3730a3; border:none; padding:5px 12px; border-radius:20px; font-size:0.78rem; font-weight:600; cursor:pointer; transition:0.2s; font-family:'Poppins',sans-serif; margin-left:4px; white-space:nowrap; }
+        .btn-reeval:hover { background:#3730a3; color:white; }
+        .btn-release:disabled, .btn-disq:disabled, .btn-reeval:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .empty-state { text-align: center; padding: 3rem; color: #6c757d; }
+
+        /* Toast */
+        #toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 10px; font-size: 0.88rem; font-weight: 500; opacity: 0; transform: translateY(20px); transition: all 0.3s; z-index: 9999; pointer-events: none; max-width: 340px; }
+        #toast.show { opacity: 1; transform: translateY(0); }
+        #toast.success { background: #2e7d32; color: white; }
+        #toast.error   { background: #c62828; color: white; }
+        #toast.info    { background: #1565c0; color: white; }
+
+        .btn-trigger { padding:8px 18px; background:linear-gradient(45deg,#6366f1,#7c3aed); color:white; border:none; border-radius:20px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:'Poppins',sans-serif; transition:0.2s; }
+        .btn-trigger:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(99,102,241,0.4); }
+        .btn-trigger:disabled { opacity:0.5; cursor:not-allowed; }
+        @keyframes fadeIn      { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes glowingLine { from{opacity:0.6} to{opacity:1;box-shadow:0 0 12px rgba(0,198,255,0.6)} }
+        @media(max-width:768px) { .header-content{flex-direction:column;align-items:flex-start;gap:1rem} td,th{padding:0.7rem} }
+    </style>
+</head>
+<body>
+<div id="toast"></div>
+<div class="dashboard-container">
+
+    <!-- Header -->
+    <div class="header-section">
+        <div class="header-content">
+            <h1 class="header-title">Results Dashboard</h1>
+            <a href="/admin" class="back-btn">← Back to Dashboard</a>
+        </div>
+        <div class="split-line"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-strip">
+        <div class="stat-pill">
+            <div class="stat-pill-val">{{ results|length if results else 0 }}</div>
+            <div class="stat-pill-lbl">Total Submissions</div>
+        </div>
+        <div class="stat-pill">
+            <div class="stat-pill-val" style="color:#2e7d32;">
+                {{ results|selectattr('submission_status','equalto','Evaluated')|list|length if results else 0 }}
+            </div>
+            <div class="stat-pill-lbl">Evaluated</div>
+        </div>
+        <div class="stat-pill">
+            <div class="stat-pill-val" style="color:#e65100;">
+                {{ results|selectattr('submission_status','equalto','Pending')|list|length if results else 0 }}
+            </div>
+            <div class="stat-pill-lbl">Pending AI Check</div>
+        </div>
+        <div class="stat-pill">
+            <div class="stat-pill-val" style="color:#6d28d9;">
+                {{ results|selectattr('submission_status','equalto','AwaitingExamEnd')|list|length if results else 0 }}
+            </div>
+            <div class="stat-pill-lbl">⏳ Awaiting Exam End</div>
+        </div>
+        <div class="stat-pill">
+            <div class="stat-pill-val" style="color:#b45309;">
+                {{ results|selectattr('submission_status','equalto','Hold')|list|length if results else 0 }}
+            </div>
+            <div class="stat-pill-lbl">🔒 On Hold</div>
+        </div>
+        <div class="stat-pill">
+            <div class="stat-pill-val" style="color:#c62828;">
+                {{ results|selectattr('submission_status','equalto','Disqualified')|list|length if results else 0 }}
+            </div>
+            <div class="stat-pill-lbl">Disqualified</div>
+        </div>
+        <div class="stat-pill">
+            <div class="stat-pill-val">
+                {% if results %}
+                    {% set scores = results|selectattr('total_score')|map(attribute='total_score')|list %}
+                    {% if scores %}{{ (scores|sum / scores|length)|round(1) }}{% else %}—{% endif %}
+                {% else %}—{% endif %}
+            </div>
+            <div class="stat-pill-lbl">Avg Score</div>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <input class="search-box" id="searchBox" type="text" placeholder="Search by name, admission no, or course...">
+        <select class="filter-select" id="statusFilter" onchange="filterTable()">
+            <option value="">All Status</option>
+            <option value="Evaluated">✓ Evaluated</option>
+            <option value="Pending">⏳ Pending</option>
+            <option value="AwaitingExamEnd">⏳ Awaiting Exam End</option>
+            <option value="Hold">🔒 On Hold</option>
+            <option value="Disqualified">✗ Disqualified</option>
+        </select>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrapper">
+        <div class="table-header">
+            <div class="table-title">Student Results</div>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div class="record-count" id="recordCount">{{ results|length if results else 0 }} records</div>
+                <!-- Trigger Evaluation — for queued students -->
+                {% set awaiting_exams = [] %}
+                {% for r in results %}{% if r.submission_status in ['AwaitingExamEnd','Pending'] and r.exam_id not in awaiting_exams %}{% set _ = awaiting_exams.append(r.exam_id) %}{% endif %}{% endfor %}
+                {% for eid in awaiting_exams %}
+                <button class="btn-trigger" id="trigger-{{ eid }}"
+                        onclick="triggerEvaluation({{ eid }})"
+                        title="Force start plagiarism check + evaluation for this exam">
+                    ▶ Trigger Evaluation (Exam #{{ eid }})
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">Student Name</th>
+                    <th onclick="sortTable(1)">Admission No</th>
+                    <th onclick="sortTable(2)">Program (Branch)</th>
+                    <th onclick="sortTable(3)">Semester</th>
+                    <th onclick="sortTable(4)">Course Name</th>
+                    <th onclick="sortTable(5)">Score</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="resultsBody">
+                {% if results %}
+                    {% for r in results %}
+                    <tr id="row-{{ r.student_id }}-{{ r.exam_id }}"
+                        class="{% if r.submission_status == 'Hold' %}row-hold{% elif r.submission_status == 'Disqualified' %}row-disq{% endif %}">
+
+                        <td style="font-weight:500;color:#2c3e50;">{{ r.student_name }}</td>
+                        <td><span style="font-family:monospace;font-size:0.85rem;">{{ r.admission_no }}</span></td>
+                        <td>{{ r.program }} ({{ r.branch }})</td>
+                        <td>Sem ({{ r.semester }})</td>
+                        <td>{{ r.exam_title }}</td>
+
+                        <!-- Score badge -->
+                        <td>
+                            {% if r.submission_status in ['Hold', 'Disqualified'] %}
+                                <span class="score-badge score-pending">—</span>
+                            {% elif r.submission_status in ['Pending', 'AwaitingExamEnd'] %}
+                                <span class="score-badge score-pending">Pending</span>
+                            {% elif r.total_score is not none %}
+                                {% set score = r.total_score|float %}
+                                {% if score >= 60 %}
+                                    <span class="score-badge score-high">{{ r.total_score }}</span>
+                                {% elif score >= 35 %}
+                                    <span class="score-badge score-mid">{{ r.total_score }}</span>
+                                {% else %}
+                                    <span class="score-badge score-low">{{ r.total_score }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="score-badge score-pending">Pending</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Status badge -->
+                        <td>
+                            {% if r.submission_status == 'Evaluated' %}
+                                <span class="status-badge status-eval">✓ Evaluated</span>
+                            {% elif r.submission_status == 'Pending' %}
+                                <span class="status-badge status-pend">⏳ Pending</span>
+                            {% elif r.submission_status == 'AwaitingExamEnd' %}
+                                <span class="status-badge" style="background:#f3e8ff;color:#6d28d9;border:1px solid #ddd6fe;">⏳ Awaiting Exam End</span>
+                            {% elif r.submission_status == 'Hold' %}
+                                <span class="status-badge status-hold">🔒 On Hold</span>
+                            {% elif r.submission_status == 'Disqualified' %}
+                                <span class="status-badge status-disq">✗ Disqualified</span>
+                            {% else %}
+                                <span class="status-badge status-pend">{{ r.submission_status }}</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Actions -->
+                        <td style="white-space:nowrap;">
+                            {% if r.submission_status == 'Hold' %}
+                                <!-- Hold → Release or Disqualify -->
+                                <button class="btn-release"
+                                        id="rel-{{ r.student_id }}-{{ r.exam_id }}"
+                                        onclick="releaseResult({{ r.student_id }}, {{ r.exam_id }}, '{{ r.student_name | replace("'", "\\'") }}')"
+                                        title="Release — start evaluation and email result">
+                                    ✓ Release
+                                </button>
+                                <button class="btn-disq"
+                                        id="disq-{{ r.student_id }}-{{ r.exam_id }}"
+                                        onclick="disqualifyResult({{ r.student_id }}, {{ r.exam_id }}, '{{ r.student_name | replace("'", "\\'") }}')"
+                                        title="Disqualify — mark as plagiarism, score = 0">
+                                    ✗ Disqualify
+                                </button>
+                            {% elif r.submission_status == 'Disqualified' %}
+                                <span style="font-size:0.78rem;color:#adb5bd;">Disqualified</span>
+                            {% else %}
+                                <a href="/result_details/{{ r.student_id }}/{{ r.exam_id }}" class="btn-view">View Details</a>
+                                {% if r.submission_status in ['Evaluated', 'Pending'] %}
+                                <button class="btn-reeval"
+                                        id="reeval-{{ r.student_id }}-{{ r.exam_id }}"
+                                        onclick="reevaluateResult({{ r.student_id }}, {{ r.exam_id }}, '{{ r.student_name | replace("'", "\\'") }}')"
+                                        title="Reset this student's theory scores and run SBERT again">
+                                    Re-evaluate
+                                </button>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr><td colspan="8" class="empty-state">No results yet.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function showToast(msg, type = 'info') {
+        const t = document.getElementById('toast');
+        t.textContent = msg; t.className = 'show ' + type;
+        clearTimeout(t._t);
+        t._t = setTimeout(() => t.className = '', 4000);
+    }
+
+    // ── Release Hold Result ──
+    async function releaseResult(studentId, examId, name) {
+        if (!confirm(`Release result for: ${name}?\n\nThis will start AI evaluation and send result email.`)) return;
+        const relBtn  = document.getElementById(`rel-${studentId}-${examId}`);
+        const disqBtn = document.getElementById(`disq-${studentId}-${examId}`);
+        if (relBtn)  { relBtn.disabled  = true; relBtn.textContent  = '⏳ Releasing...'; }
+        if (disqBtn) { disqBtn.disabled = true; }
+        try {
+            const resp = await fetch(`/release_result/${studentId}/${examId}`, { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) {
+                showToast(`✓ ${name} — evaluation started, email will be sent`, 'success');
+                // Update row UI
+                const row = document.getElementById(`row-${studentId}-${examId}`);
+                if (row) {
+                    row.className = '';
+                    row.children[6].innerHTML = '<span class="status-badge status-pend">⏳ Pending</span>';
+                    row.children[7].innerHTML = '<span style="font-size:0.78rem;color:#6c757d;">Processing...</span>';
+                }
+            } else {
+                showToast(`✗ Failed: ${data.message}`, 'error');
+                if (relBtn)  { relBtn.disabled  = false; relBtn.textContent  = '✓ Release'; }
+                if (disqBtn) { disqBtn.disabled = false; }
+            }
+        } catch(e) {
+            showToast('Network error. Please retry.', 'error');
+            if (relBtn)  { relBtn.disabled  = false; relBtn.textContent  = '✓ Release'; }
+            if (disqBtn) { disqBtn.disabled = false; }
+        }
+      }
+
+      // ── Re-evaluate Clean Result ──
+      async function reevaluateResult(studentId, examId, name) {
+          if (!confirm(`Re-evaluate result for: ${name}?\n\nThis will reset theory scores and run SBERT evaluation again.`)) return;
+          const btn = document.getElementById(`reeval-${studentId}-${examId}`);
+          if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+          try {
+              const resp = await fetch(`/reevaluate_result/${studentId}/${examId}`, { method: 'POST' });
+              const data = await resp.json();
+              if (data.success) {
+                  showToast(`✓ ${name} — ${data.message}`, 'success');
+                  const row = document.getElementById(`row-${studentId}-${examId}`);
+                  if (row) {
+                      row.children[5].innerHTML = '<span class="score-badge score-pending">Pending</span>';
+                      row.children[6].innerHTML = '<span class="status-badge status-pend">⏳ Pending</span>';
+                      row.children[7].innerHTML = '<span style="font-size:0.78rem;color:#6c757d;">Processing...</span>';
+                  }
+                  setTimeout(() => location.reload(), 5000);
+              } else {
+                  showToast(`✗ Failed: ${data.message}`, 'error');
+                  if (btn) { btn.disabled = false; btn.textContent = 'Re-evaluate'; }
+              }
+          } catch(e) {
+              showToast('Network error. Please retry.', 'error');
+              if (btn) { btn.disabled = false; btn.textContent = 'Re-evaluate'; }
+          }
+      }
+
+      // ── Disqualify Result ──
+      async function disqualifyResult(studentId, examId, name) {
+        if (!confirm(`Disqualify: ${name}?\n\nScore will be set to 0. This cannot be undone easily.`)) return;
+        const relBtn  = document.getElementById(`rel-${studentId}-${examId}`);
+        const disqBtn = document.getElementById(`disq-${studentId}-${examId}`);
+        if (relBtn)  { relBtn.disabled  = true; }
+        if (disqBtn) { disqBtn.disabled = true; disqBtn.textContent = '⏳ Processing...'; }
+        try {
+            const resp = await fetch(`/disqualify_result/${studentId}/${examId}`, { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) {
+                showToast(`✗ ${name} disqualified — score = 0`, 'error');
+                const row = document.getElementById(`row-${studentId}-${examId}`);
+                if (row) {
+                    row.className = 'row-disq';
+                    row.children[5].innerHTML = '<span class="score-badge score-low">0</span>';
+                    row.children[6].innerHTML = '<span class="status-badge status-disq">✗ Disqualified</span>';
+                    row.children[7].innerHTML = '<span style="font-size:0.78rem;color:#adb5bd;">Disqualified</span>';
+                }
+            } else {
+                showToast(`✗ Failed: ${data.message}`, 'error');
+                if (relBtn)  { relBtn.disabled  = false; }
+                if (disqBtn) { disqBtn.disabled = false; disqBtn.textContent = '✗ Disqualify'; }
+            }
+        } catch(e) {
+            showToast('Network error. Please retry.', 'error');
+            if (relBtn)  { relBtn.disabled  = false; }
+            if (disqBtn) { disqBtn.disabled = false; disqBtn.textContent = '✗ Disqualify'; }
+        }
+    }
+
+    // ── Search + Filter ──
+    document.getElementById('searchBox').addEventListener('input', filterTable);
+
+    function filterTable() {
+        const q      = document.getElementById('searchBox').value.toLowerCase();
+        const status = document.getElementById('statusFilter').value.toLowerCase();
+        const rows   = document.querySelectorAll('#resultsBody tr');
+        let visible  = 0;
+        rows.forEach(row => {
+            const text  = row.textContent.toLowerCase();
+            const rowSt = row.children[6] ? row.children[6].textContent.toLowerCase() : '';
+            const ok    = (!q || text.includes(q)) && (!status || rowSt.includes(status));
+            row.style.display = ok ? '' : 'none';
+            if (ok) visible++;
+        });
+        document.getElementById('recordCount').textContent = visible + ' records';
+    }
+
+    // ── Sort ──
+    let sortDir = {};
+    function sortTable(colIdx) {
+        const tbody = document.getElementById('resultsBody');
+        const rows  = Array.from(tbody.querySelectorAll('tr'));
+        const dir   = (sortDir[colIdx] === 'asc') ? 'desc' : 'asc';
+        sortDir = {}; sortDir[colIdx] = dir;
+        document.querySelectorAll('th').forEach((th, i) => {
+            th.className = i === colIdx ? 'sorted-' + dir : '';
+        });
+        rows.sort((a, b) => {
+            const aT = a.children[colIdx]?.textContent.trim() || '';
+            const bT = b.children[colIdx]?.textContent.trim() || '';
+            const aN = parseFloat(aT), bN = parseFloat(bT);
+            if (!isNaN(aN) && !isNaN(bN)) return dir === 'asc' ? aN - bN : bN - aN;
+            return dir === 'asc' ? aT.localeCompare(bT) : bT.localeCompare(aT);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    }
+
+    // ── Trigger Evaluation ──
+    async function triggerEvaluation(examId) {
+        const btn = document.getElementById('trigger-' + examId);
+        if (!confirm('Force-start evaluation for Exam #' + examId + '?\n\nThis will run plagiarism check and evaluate all queued students.')) return;
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Starting...'; }
+        try {
+            const resp = await fetch('/trigger_exam_evaluation/' + examId, { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) {
+                showToast('✓ ' + data.message, 'success');
+                if (btn) { btn.textContent = '✓ Triggered'; btn.style.background = '#2e7d32'; }
+                setTimeout(() => location.reload(), 4000);
+            } else {
+                showToast('✗ ' + data.message, 'error');
+                if (btn) { btn.disabled = false; btn.textContent = '▶ Trigger Evaluation'; }
+            }
+        } catch(e) {
+            showToast('Network error', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = '▶ Trigger Evaluation'; }
+        }
+    }
+
+</script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+# Python / Flask
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+instance/
+
+# Secrets / Environment — NEVER commit real secrets
+.env
+.env.*
+!.env.example
+*.env
+
+# Credentials, keys, certificates, tokens
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_dsa
+*.pem.pub
+credentials.json
+service-account*.json
+secrets.json
+*.secret
+*_secret*
+*token*.json
+
+# Databases / dumps / backups
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+*.bak
+*.backup
+*.backup2
+*.optional
+*.old
+*.orig
+
+# Biometric / face recognition data
+*.npy
+*.npz
+*.pkl
+*.pickle
+embeddings/
+faces/
+face_data/
+uploads/
+biometric/
+
+# Node.js / Electron (Secure Browser)
+node_modules/
+secure-browser/node_modules/
+secure-browser/dist/
+secure-browser/out/
+secure-browser/build/
+
+# OS Files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+desktop.ini
+
+# AI Models (large weight files)
+*.pt
+*.pth
+*.onnx
+*.h5
+
+# Schedule or Commands / scratch
+todo.md
+
+# Nginx - Reverse Proxy (may contain server/IP details)
+oems_nginx.conf
+
+# Logs (may contain student / violation data — never push)
+logs/
+*.log

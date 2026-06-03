@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS · Admin Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+
+        body {
+            background-color: #f4f7f6;
+            color: #333;
+            min-height: 100vh;
+            padding: 2rem;
+            background-image:
+                radial-gradient(circle at top right, #eef2f3, transparent 40%),
+                radial-gradient(circle at bottom left, #e0eafc, transparent 40%);
+        }
+
+        .dashboard-container { max-width: 1300px; margin: 0 auto; animation: fadeIn 0.8s ease-in-out; }
+
+        /* ── Header ── */
+        .header-section { margin-bottom: 2.5rem; }
+        .header-content { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .header-text-group { display: flex; flex-direction: column; }
+        .header-title { font-size: 2.2rem; font-weight: 600; color: #2c3e50; text-transform: uppercase; letter-spacing: 2px; line-height: 1.2; }
+        .header-subtitle { color: #6c757d; font-size: 0.9rem; margin-top: 4px; }
+        .logout-btn { display: inline-block; color: #dc3545; text-decoration: none; font-size: 0.95rem; border: 1px solid #dc3545; padding: 9px 22px; border-radius: 25px; transition: 0.3s; background: white; white-space: nowrap; font-weight: 500; }
+        .logout-btn:hover { background: #dc3545; color: white; box-shadow: 0 4px 15px rgba(220,53,69,0.3); }
+        .split-line { width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #007bff, #00c6ff, #007bff, transparent); box-shadow: 0 0 10px rgba(0,123,255,0.4); animation: glowingLine 2s infinite alternate; }
+
+        /* ── Stats Grid — FIX: pehle missing tha ── */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.2rem; margin-bottom: 2rem; }
+        .stat-card { background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.05); border-radius: 15px; padding: 1.4rem; text-align: center; box-shadow: 0 4px 15px rgba(31,38,135,0.05); transition: 0.3s; }
+        .stat-card:hover { transform: translateY(-4px); box-shadow: 0 8px 25px rgba(0,123,255,0.1); }
+        .stat-icon { font-size: 1.8rem; margin-bottom: 8px; }
+        .stat-value { font-size: 1.9rem; font-weight: 600; color: #2c3e50; margin-bottom: 4px; }
+        .stat-label { color: #6c757d; font-size: 0.82rem; font-weight: 500; }
+
+        /* ── Quick Actions ── */
+        .actions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1.2rem; margin-bottom: 2rem; }
+        .action-item { background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.05); border-radius: 15px; padding: 1.1rem; display: flex; align-items: center; gap: 14px; text-decoration: none; color: #333; transition: 0.3s; box-shadow: 0 4px 15px rgba(31,38,135,0.05); }
+        .action-item:hover { transform: translateY(-3px); border-color: #007bff; box-shadow: 0 8px 25px rgba(0,123,255,0.15); }
+        .action-icon { width: 44px; height: 44px; border-radius: 12px; background: rgba(0,123,255,0.1); color: #007bff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; transition: 0.3s; flex-shrink: 0; }
+        .action-item:hover .action-icon { background: #007bff; color: white; }
+        .action-title { font-weight: 600; font-size: 0.95rem; color: #2c3e50; }
+        .action-desc { color: #6c757d; font-size: 0.78rem; }
+
+        /* ── AI Tools ── */
+        .ai-section { display: flex; gap: 12px; justify-content: flex-end; margin-bottom: 1.2rem; flex-wrap: wrap; }
+        .ai-btn { padding: 8px 18px; border-radius: 25px; font-size: 0.88rem; font-weight: 500; text-decoration: none; transition: 0.3s; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: none; font-family: 'Poppins', sans-serif; }
+        .ai-eval { background: rgba(0,123,255,0.1); color: #007bff; border: 1px solid rgba(0,123,255,0.2); }
+        .ai-eval:hover { background: #007bff; color: white; }
+        .ai-reset { background: rgba(220,53,69,0.1); color: #dc3545; border: 1px solid rgba(220,53,69,0.2); }
+        .ai-reset:hover { background: #dc3545; color: white; }
+
+        /* AI Progress bar — shown during evaluation */
+        #aiProgress { display: none; background: rgba(0,123,255,0.08); border: 1px solid rgba(0,123,255,0.2); border-radius: 10px; padding: 10px 16px; margin-bottom: 1rem; }
+        #aiProgress .prog-label { font-size: 0.85rem; color: #007bff; font-weight: 500; margin-bottom: 6px; }
+        #aiProgress .prog-track { height: 6px; background: rgba(0,123,255,0.15); border-radius: 3px; overflow: hidden; }
+        #aiProgress .prog-fill { height: 100%; width: 0%; background: #007bff; border-radius: 3px; animation: progAnim 2s ease-in-out infinite; }
+        @keyframes progAnim { 0%{width:10%} 50%{width:80%} 100%{width:95%} }
+
+        /* ── Table ── */
+        .table-wrapper { background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.05); border-radius: 15px; overflow-x: auto; box-shadow: 0 8px 32px rgba(31,38,135,0.07); }
+        .table-header { padding: 1.3rem 1.5rem; border-bottom: 1px solid #e9ecef; display: flex; justify-content: space-between; align-items: center; }
+        .table-title { font-size: 1.05rem; font-weight: 600; color: #2c3e50; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background: rgba(0,123,255,0.05); color: #0056b3; padding: 0.9rem 1rem; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid #e9ecef; white-space: nowrap; font-size: 0.85rem; }
+        td { padding: 0.9rem 1rem; border-bottom: 1px solid #e9ecef; color: #495057; vertical-align: middle; font-size: 0.88rem; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(0,123,255,0.02); }
+
+        .soft-badge { padding: 3px 9px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; display: inline-block; }
+        .badge-id   { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
+        .badge-type { background: #e3f2fd; color: #1976d2; }
+
+        .action-btn { padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; text-decoration: none; transition: 0.2s; font-weight: 500; display: inline-block; margin: 2px; white-space: nowrap; }
+        .btn-add    { background: #e8f5e9; color: #2e7d32; } .btn-add:hover    { background: #2e7d32; color: white; }
+        .btn-manage { background: #e3f2fd; color: #1565c0; } .btn-manage:hover { background: #1565c0; color: white; }
+        .btn-check  { background: #fff3e0; color: #ef6c00; } .btn-check:hover  { background: #ef6c00; color: white; }
+        .btn-del    { background: #ffebee; color: #c62828; border: none; cursor: pointer; font-family: 'Poppins', sans-serif; } .btn-del:hover { background: #c62828; color: white; }
+
+        /* FIX: Publish/Unpublish — confirmation added via JS */
+        .status-toggle { padding: 4px 11px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; text-decoration: none; display: inline-block; }
+        .status-draft { background: #fff3e0; color: #ef6c00; border: 1px solid #ffe0b2; }
+        .status-pub   { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+
+        .empty-state { text-align: center; padding: 3rem; color: #6c757d; }
+
+        /* Toast notification */
+        #toast { position: fixed; bottom: 24px; right: 24px; background: #2c3e50; color: white; padding: 12px 20px; border-radius: 10px; font-size: 0.88rem; font-weight: 500; opacity: 0; transform: translateY(20px); transition: all 0.3s; z-index: 9999; pointer-events: none; }
+        #toast.show { opacity: 1; transform: translateY(0); }
+        #toast.success { background: #2e7d32; }
+        #toast.error   { background: #c62828; }
+
+        /* Animations */
+        @keyframes fadeIn      { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes glowingLine { from { opacity: 0.6; } to { opacity: 1; box-shadow: 0 0 12px rgba(0,198,255,0.6); } }
+
+        @media (max-width: 768px) {
+            .header-content { flex-direction: column; align-items: flex-start; gap: 1rem; }
+            .header-title { font-size: 1.6rem; }
+            .ai-section { justify-content: flex-start; }
+            td, th { padding: 0.7rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<div class="dashboard-container">
+
+    <!-- Header -->
+    <div class="header-section">
+        <div class="header-content">
+            <div class="header-text-group">
+                <h1 class="header-title">
+                    Welcome,
+                    {% if admin_branch == 'ALL' %}Super{% else %}{{ admin_branch }}{% endif %}
+                    Admin!
+                </h1>
+                <p class="header-subtitle">Manage your examination system from one place</p>
+            </div>
+            <a href="/logout" class="logout-btn">Logout →</a>
+        </div>
+        <div class="split-line"></div>
+    </div>
+
+    <!-- FIX: Stats Grid — pehle HTML mein tha hi nahi -->
+    <!-- <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">📋</div>
+            <div class="stat-value">{{ exams|length if exams else 0 }}</div>
+            <div class="stat-label">Total Exams</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🎓</div>
+            <div class="stat-value">{{ total_students }}</div>
+            <div class="stat-label">Registered Students</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-value">{{ active_exams }}</div>
+            <div class="stat-label">Active Exams</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🤖</div>
+            <div class="stat-value">{{ pending_ai_checks }}</div>
+            <div class="stat-label">Pending AI Checks</div>
+        </div>
+    </div> -->
+
+    <!-- Quick Actions -->
+    <div class="actions-grid">
+        <a href="/create_exam" class="action-item">
+            <div class="action-icon">📝</div>
+            <div><div class="action-title">Create Exam</div><div class="action-desc">Add new assessment</div></div>
+        </a>
+        <a href="/add_student" class="action-item">
+            <div class="action-icon">👤</div>
+            <div><div class="action-title">Add Student</div><div class="action-desc">Register new student</div></div>
+        </a>
+        <a href="/student_manager" class="action-item">
+            <div class="action-icon">👥</div>
+            <div><div class="action-title">Manage Students</div><div class="action-desc">View & edit records</div></div>
+        </a>
+        <a href="/results" class="action-item">
+            <div class="action-icon">📊</div>
+            <div><div class="action-title">Results</div><div class="action-desc">View performance</div></div>
+        </a>
+        <a href="/violation_logs" class="action-item">
+            <div class="action-icon">🔍</div>
+            <div>
+                <div class="action-title">Violation Logs</div>
+                <div class="action-desc">View exam security events</div>
+            </div>
+        </a>
+    </div>
+
+    <!-- AI Tools — FIX: confirmation + progress bar -->
+    <!-- <div class="ai-section">
+        <button class="ai-btn ai-eval" onclick="runAICheck()">Run Evaluation</button>
+        <button class="ai-btn ai-reset" onclick="resetAICheck()">Reset Evaluation</button>
+    </div> -->
+
+    <!-- AI Progress Indicator -->
+    <!-- <div id="aiProgress">
+        <div class="prog-label">🤖 AI evaluation in progress — please wait, do not close this page...</div>
+        <div class="prog-track"><div class="prog-fill"></div></div>
+    </div> -->
+
+    <!-- Exam Table -->
+    <div class="table-wrapper">
+        <div class="table-header">
+            <div class="table-title">Exam Database</div>
+            <div class="soft-badge badge-type">{{ exams|length if exams else 0 }} Records</div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Course Title</th>
+                    <th>Program (Branch)</th>
+                    <th>Semester</th>
+                    <th>Type/Marks</th>
+                    <th>Schedule</th>
+                    <th>Questions</th>
+                    <th>Security</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if exams and exams|length > 0 %}
+                    {% for exam in exams %}
+                    <tr>
+                        <td><span class="soft-badge badge-id">#{{ exam.id }}</span></td>
+                        <td style="font-weight:500;color:#2c3e50;">{{ exam.title }}</td>
+                        <td style="color:#2c3e50;font-weight:500;">{{ exam.program }} ({{ exam.branch }})</td>
+                        <td style="color:#2c3e50;font-weight:500;">Sem ({{ exam.semester }})</td>
+                        <td>
+                            <span class="soft-badge badge-type">{{ exam.exam_type }}</span><br>
+                            <small style="color:#6c757d;">{{ exam.total_marks }} Marks</small>
+                        </td>
+                        <td>
+                            <div style="color:#2c3e50;font-weight:500;">
+                                {{ exam.start_time.strftime("%d %b, %Y, %I:%M %p") if exam.start_time else '---' }}
+                            </div>
+                            <small style="color:#6c757d;">Dur: {{ exam.duration }} mins</small>
+                        </td>
+                        <td>
+                            <a href="/add_question/{{ exam.id }}" class="action-btn btn-add">+ Add</a>
+                            <a href="/questions/{{ exam.id }}" class="action-btn btn-manage">Manage</a>
+                        </td>
+                        <td>
+                            {% if exam.exam_type == 'theory' %}
+                                <a href="/plagiarism/{{ exam.id }}" class="action-btn btn-check">Plagiarism</a>
+                            {% else %}
+                                <span class="soft-badge" style="background:#e9ecef;color:#6c757d;border:1px solid #dee2e6;">N/A</span>
+                            {% endif %}
+                        </td>
+                        <!-- FIX: Publish/Unpublish — confirmation added -->
+                        <td>
+                            {% if exam.status == "draft" %}
+                                <a href="/publish_exam/{{ exam.id }}"
+                                   class="status-toggle status-draft"
+                                   onclick="return confirmPublish(event, '{{ exam.title }}', 'publish')">
+                                   Draft
+                                </a>
+                            {% else %}
+                                <a href="/unpublish_exam/{{ exam.id }}"
+                                   class="status-toggle status-pub"
+                                   onclick="return confirmPublish(event, '{{ exam.title }}', 'unpublish')">
+                                   Published
+                                </a>
+                            {% endif %}
+                        </td>
+                        <!-- FIX: Delete — POST form instead of GET link -->
+                        <td>
+                            <form method="POST" action="/delete_exam/{{ exam.id }}" style="display:inline;"
+                                  onsubmit="return confirmDelete(event, '{{ exam.title }}')">
+                                <button type="submit" class="action-btn btn-del">Remove</button>
+                            </form>
+                        </td>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="10">
+                            <div class="empty-state">
+                                <div style="font-size:1.05rem;color:#2c3e50;font-weight:500;">No exams found</div>
+                                <p style="margin:6px 0 16px;">You haven't created any exams yet.</p>
+                                <a href="/create_exam" class="action-btn btn-manage" style="padding:10px 20px;font-size:0.95rem;">Create First Exam</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<script>
+    // ── Toast helper ──
+    function showToast(msg, type = '') {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'show ' + type;
+        clearTimeout(t._timer);
+        t._timer = setTimeout(() => t.className = '', 3000);
+    }
+
+    // FIX: AI Check — progress indicator + feedback
+    function runAICheck() {
+        if (!confirm('Run AI evaluation on all pending theory answers?\n\nThis may take a few minutes.')) return;
+        document.getElementById('aiProgress').style.display = 'block';
+        showToast('AI evaluation started...', '');
+
+        fetch('/run_ai_check')
+            .then(res => res.text())
+            .then(msg => {
+                document.getElementById('aiProgress').style.display = 'none';
+                showToast(msg, 'success');
+                setTimeout(() => location.reload(), 1500);
+            })
+            .catch(err => {
+                document.getElementById('aiProgress').style.display = 'none';
+                showToast('AI evaluation failed. Try again.', 'error');
+            });
+    }
+
+    // FIX: Reset AI — confirmation
+    function resetAICheck() {
+        if (!confirm('Reset ALL theory answer scores to NULL?\n\nThis will require re-evaluation.')) return;
+        fetch('/reset_ai_evaluation')
+            .then(res => res.text())
+            .then(() => {
+                showToast('AI scores reset successfully.', 'success');
+                setTimeout(() => location.reload(), 1500);
+            })
+            .catch(() => showToast('Reset failed.', 'error'));
+    }
+
+    // FIX: Delete exam — confirmation with exam name
+    function confirmDelete(event, examTitle) {
+        if (!confirm(`Are you sure you want to permanently delete:\n\n"${examTitle}"\n\nThis will also delete all questions and student answers. This cannot be undone.`)) {
+            event.preventDefault();
+            return false;
+        }
+        showToast('Deleting exam...', '');
+        return true;
+    }
+
+    // FIX: Publish/Unpublish — confirmation
+    function confirmPublish(event, examTitle, action) {
+        const msg = action === 'publish'
+            ? `Publish "${examTitle}"?\n\nStudents will be notified and can start the exam.`
+            : `Unpublish "${examTitle}"?\n\nStudents will lose access immediately — even mid-exam.`;
+        if (!confirm(msg)) {
+            event.preventDefault();
+            return false;
+        }
+        return true;
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+    "name": "secure-exam-browser",
+    "version": "1.0.0",
+    "description": "SEB-like secure exam browser for Mac",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "build": "electron-builder --mac"
+    },
+    "author": "Anshuman Kumar Singh",
+    "license": "MIT",
+    "devDependencies": {
+        "electron": "^28.0.0"
+    },
+    "dependencies": {
+        "axios": "^1.13.6"
+    }
+}

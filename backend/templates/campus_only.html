@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS · Campus Network Required</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
+        body { background:#f4f7f6; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:2rem;
+               background-image: radial-gradient(circle at top right,#eef2f3,transparent 40%), radial-gradient(circle at bottom left,#e0eafc,transparent 40%); }
+        .card { background:rgba(255,255,255,0.9); backdrop-filter:blur(12px); border:1px solid rgba(0,0,0,0.05); border-radius:20px; padding:3rem 2.5rem; max-width:500px; width:100%; text-align:center; box-shadow:0 20px 40px rgba(0,0,0,0.08); }
+        .icon { font-size:4rem; margin-bottom:1.5rem; }
+        h1 { font-size:1.6rem; font-weight:600; color:#2c3e50; margin-bottom:0.75rem; }
+        .exam-name { background:#e3f2fd; color:#0056b3; padding:6px 16px; border-radius:20px; font-size:0.9rem; font-weight:600; display:inline-block; margin-bottom:1.5rem; }
+        p { color:#6c757d; font-size:0.95rem; line-height:1.7; margin-bottom:1rem; }
+        .ip-box { background:#f8f9fa; border:1px solid #e9ecef; border-radius:10px; padding:0.9rem 1.2rem; font-size:0.88rem; color:#495057; margin:1.2rem 0; font-family:monospace; }
+        .ip-label { font-family:'Poppins',sans-serif; font-size:0.78rem; color:#6c757d; font-weight:500; margin-bottom:4px; }
+        .alert-box { background:#ffebee; border:1px solid #ffcdd2; border-left:4px solid #ef4444; border-radius:10px; padding:0.9rem 1.2rem; font-size:0.88rem; color:#c62828; margin-bottom:1.5rem; text-align:left; }
+        .back-btn { display:inline-block; color:#555; text-decoration:none; border:1px solid #ccc; padding:10px 24px; border-radius:25px; transition:0.3s; background:white; font-weight:500; font-size:0.95rem; }
+        .back-btn:hover { background:#f0f0f0; color:#111; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="icon">🏛️</div>
+    <h1>Campus Network Required</h1>
+    <div class="exam-name">{{ exam.title }}</div>
+
+    <p>This exam can only be attempted from the <strong>college campus network</strong>. You must be physically present at college and connected to the campus WiFi or LAN.</p>
+
+    <div class="ip-box">
+        <div class="ip-label">Your current IP address</div>
+        <strong>{{ client_ip }}</strong>
+        <div style="margin-top:4px;font-family:'Poppins',sans-serif;font-size:0.78rem;color:#dc2626;">
+            This IP is not recognized as a campus network address.
+        </div>
+    </div>
+
+    <div class="alert-box">
+        Please come to college, connect to the campus network, open the OEMS Secure Browser, and attempt the exam from there.
+    </div>
+
+    <a href="/student" class="back-btn">← Back to Dashboard</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OEMS - Online Examination Management System</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Poppins:wght@300;400;500;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            /* CHANGED TO LIGHT THEME COLORS */
+            --bg-color: #f1f5f9;         /* Light slate gray background */
+            --container-bg: rgba(255, 255, 255, 0.85); /* Glassy white */
+            --neon-cyan: #4f46e5;        /* Deep Indigo/Blue instead of cyan */
+            --neon-teal: #3b82f6;        /* Bright Blue instead of teal */
+            --text-main: #0f172a;        /* Near black for main text */
+            --text-muted: #64748b;       /* Muted gray for subtitles */
+            
+            /* Premium smooth sliding animation */
+            --smooth-slide: cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; position: relative;
+        }
+
+        /* Animated Blobs (Updated colors for light theme) */
+        .mesh-bg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; }
+        .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.5; animation: float 10s infinite ease-in-out alternate; }
+        .blob-1 { width: 400px; height: 400px; background: rgba(79, 70, 229, 0.15); top: -100px; left: -100px; }
+        .blob-2 { width: 500px; height: 500px; background: rgba(59, 130, 246, 0.15); bottom: -150px; right: -100px; animation-delay: -5s; }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(30px, 50px) scale(1.1); }
+        }
+
+        /* Main Glass Container (Updated border & shadow for light theme) */
+        .main-container {
+            position: relative; width: 950px; max-width: 95%; height: 550px;
+            background: var(--container-bg); backdrop-filter: blur(20px);
+            border: 1px solid rgba(79, 70, 229, 0.2); border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            overflow: hidden; z-index: 1;
+        }
+
+        /* -------------------------------------
+           LEFT SIDE (FORMS CONTAINER)
+        -------------------------------------- */
+        .forms-container {
+            position: absolute; top: 0; left: 0; 
+            width: calc(55% - 10px); /* 10px shifted left */
+            height: 100%;
+            transition: all 0.8s var(--smooth-slide); 
+            z-index: 1;
+        }
+
+        .form-view {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            padding: 50px; display: flex; flex-direction: column; justify-content: center;
+            /* Fast fade out initially */
+            opacity: 0; visibility: hidden; transform: translateX(30px);
+            transition: opacity 0.3s ease, transform 0.4s ease, visibility 0.3s;
+        }
+
+        /* Active Form State (Smooth fade in) */
+        .form-view.active-view {
+            opacity: 1; visibility: visible; transform: translateX(0);
+            transition: opacity 0.5s ease 0.4s, transform 0.5s var(--smooth-slide) 0.4s; 
+            pointer-events: auto;
+        }
+
+        /* Home specifically slides left when deactivated */
+        .home-view { transform: translateX(0); }
+        .main-container.slide-active .home-view {
+            transform: translateX(-50px);
+            transition: opacity 0.3s ease, transform 0.4s ease, visibility 0.3s;
+        }
+
+        /* Typography & Buttons (Removed text shadow for cleaner light look) */
+        h1, h2 { font-family: 'Orbitron', sans-serif; }
+        .home-view h1 { font-size: 2.2rem; margin-bottom: 10px; color: var(--text-main); }
+        .form-view h2 { font-size: 2rem; color: var(--neon-cyan); margin-bottom: 5px; display: flex; align-items: center; gap: 10px; }
+        
+        .subtitle { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 30px; font-weight: 400; }
+        .security-tag { display: inline-block; font-size: 0.7rem; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 3px 8px; border-radius: 12px; margin-bottom: 20px; letter-spacing: 1px; text-transform: uppercase; box-shadow: 0 0 8px rgba(255, 77, 77, 0.3); }
+
+        .buttons { display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px; }
+        .btn { padding: 15px; text-align: center; border-radius: 30px; font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 1.1rem; cursor: pointer; transition: all 0.3s ease; }
+        
+        /* Updated Admin Button (Solid primary color) */
+        .btn-admin { background: linear-gradient(90deg, var(--neon-cyan), var(--neon-teal)); color: #fff; border: none; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3); }
+        .btn-admin:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4); }
+        
+        /* Updated Student Button (Outline primary color) */
+        .btn-student { background: transparent; color: var(--neon-cyan); border: 2px solid var(--neon-cyan); }
+        .btn-student:hover { background: rgba(79, 70, 229, 0.05); }
+        
+        .features p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 8px; font-weight: 500;}
+
+        /* Form Inputs (Updated for light background) */
+        .input-group { margin-bottom: 20px; display: flex; flex-direction: column; }
+        .input-group label { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+        .input-group input { padding: 12px 15px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; color: var(--text-main); font-family: 'Poppins', sans-serif; transition: 0.3s; outline: none; }
+        .input-group input:focus { border-color: var(--neon-cyan); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); background: #ffffff; }
+        
+        /* Uppercase styling hint for users - optional but helpful */
+        .uppercase-hint { 
+            font-size: 0.7rem; 
+            color: var(--neon-cyan); 
+            margin-top: 4px; 
+            font-weight: 400;
+            opacity: 0.8;
+        }
+
+        .back-link { display: inline-block; margin-top: 20px; color: var(--text-muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; cursor: pointer; background: none; border: none; font-family: 'Poppins', sans-serif; transition: all 0.3s ease; text-align: center; width: 100%; }
+        .back-link:hover { color: var(--neon-cyan); }
+
+        /* -------------------------------------
+           RIGHT SIDE (WELCOME PANEL OVERLAY)
+        -------------------------------------- */
+        .welcome-panel {
+            position: absolute; top: 0; 
+            left: calc(55% - 10px); 
+            width: calc(45% + 10px); 
+            height: 100%;
+            /* Kept the beautiful gradient for the sliding panel, updated to indigo/blue */
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-teal));
+            clip-path: polygon(15% 0, 100% 0, 100% 100%, 0% 100%);
+            transition: all 0.8s var(--smooth-slide); z-index: 10;
+        }
+
+        .welcome-panel::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background-image: linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
+            background-size: 20px 20px; opacity: 0.3;
+        }
+
+        /* Text Container - Absolute position */
+        .welcome-text { 
+            position: absolute; 
+            top: 50%;
+            left: 50%;
+            width: 350px; 
+            text-align: left; 
+            transform: translate(calc(-50% + 45px), -50%); 
+            transition: transform 0.8s var(--smooth-slide); 
+            z-index: 2; 
+        }
+        
+        .welcome-text h2 { 
+            font-size: 3rem; 
+            line-height: 1.2; 
+            margin-bottom: 20px; 
+            color: #fff;
+        }
+        
+        #welcomeSubtext { 
+            font-size: 1.1rem; 
+            line-height: 1.5; 
+            min-height: 60px;
+            color: #e0e7ff;
+            transition: opacity 0.3s ease; 
+        }
+
+        /* =========================================
+           SLIDING MAGIC (THE SMOOTH TRIGGER)
+           ========================================= */
+        .main-container.slide-active .forms-container { 
+            left: calc(45% + 10px); 
+        }
+        
+        .main-container.slide-active .welcome-panel {
+            left: 0; 
+            clip-path: polygon(0 0, 100% 0, 85% 100%, 0 100%);
+        }
+
+        .main-container.slide-active .welcome-text {
+            transform: translate(calc(-50% - 15px), -50%); 
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="mesh-bg">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="main-container" id="appContainer">
+
+        <div class="forms-container">
+            
+            <div class="form-view home-view active-view" id="homeView">
+                <h1>Online Examination Management System</h1>
+                <p class="subtitle">Secure, Fast, and Reliable Platform</p>
+
+                <div class="buttons">
+                    <button type="button" id="showAdminBtn" class="btn btn-admin">Admin Login</button>
+                    <button type="button" id="showStudentBtn" class="btn btn-student">Student Login</button>
+                </div>
+
+                <div class="features">
+                    <p>🛡 Proctored Exams</p>
+                    <p>📊 Real-time AI Evaluation</p>
+                    <p>🔒 Plagiarism Detection</p>
+                </div>
+            </div>
+
+            <div class="form-view student-view" id="studentView">
+                <h2>Student Login</h2>
+                <p class="subtitle" style="margin-bottom: 25px;">Enter credentials to access your Exams!</p><br>
+
+                <form action="/student_login" method="POST">
+                    <div class="input-group">
+                        <label>Admission Number</label>
+                        <input type="text" 
+                               name="admission_no" 
+                               placeholder="ENTER ADMISSION NO" 
+                               required
+                               oninput="this.value = this.value.toUpperCase()"
+                               style="text-transform: uppercase;">
+                    </div>
+                    <div class="input-group">
+                        <label>Password</label>
+                        <input type="password" name="password" placeholder="ENTER PASSWORD" required>
+                    </div>
+                    <button type="submit" class="btn btn-admin" style="width: 100%; margin-top: 10px;">Login</button>
+                </form>
+                <button type="button" class="back-link go-back-btn">← Back to Home</button>
+            </div>
+
+            <div class="form-view admin-view" id="adminView">
+                <h2>Admin Login</h2>
+                <p class="subtitle" style="margin-bottom: 25px;">Enter credentials to access your Admin Dashboard!</p><br>
+
+                <form action="/admin_login" method="POST">
+                    <div class="input-group">
+                        <label>Admin ID</label>
+                        <input type="text" 
+                               name="admin_id" 
+                               placeholder="ENTER ADMIN ID" 
+                               required
+                               oninput="this.value = this.value.toUpperCase()"
+                               style="text-transform: uppercase;">
+                    </div>
+                    <div class="input-group">
+                        <label>Security Passkey</label>
+                        <input type="password" name="password" placeholder="ENTER PASSWORD" required>
+                    </div>
+                    <button type="submit" class="btn btn-admin" style="width: 100%; margin-top: 10px;">Authenticate</button>
+                </form>
+                <button type="button" class="back-link go-back-btn">← Terminate Session (Back)</button>
+            </div>
+
+        </div>
+
+        <div class="welcome-panel">
+            <div class="welcome-text">
+                <h2>WELCOME<br>BACK!</h2>
+                <p id="welcomeSubtext">Hope you and your family have a great day</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const appContainer = document.getElementById('appContainer');
+        const showStudentBtn = document.getElementById('showStudentBtn');
+        const showAdminBtn = document.getElementById('showAdminBtn');
+        const goBackBtns = document.querySelectorAll('.go-back-btn');
+        
+        const homeView = document.getElementById('homeView');
+        const studentView = document.getElementById('studentView');
+        const adminView = document.getElementById('adminView');
+        const welcomeSubtext = document.getElementById('welcomeSubtext');
+
+        // Helper function for smooth text changing
+        function changeWelcomeText(newText) {
+            welcomeSubtext.style.opacity = '0'; // Fade out
+            setTimeout(() => {
+                welcomeSubtext.innerText = newText;
+                welcomeSubtext.style.opacity = '1'; // Fade in with new text
+            }, 300); // Wait for 300ms (while panel is moving)
+        }
+
+        // Student Click
+        showStudentBtn.addEventListener('click', () => {
+            appContainer.classList.add('slide-active');
+            
+            homeView.classList.remove('active-view');
+            studentView.classList.add('active-view');
+            
+            changeWelcomeText('Ready to ace your exams today?');
+        });
+
+        // Admin Click
+        showAdminBtn.addEventListener('click', () => {
+            appContainer.classList.add('slide-active');
+            
+            homeView.classList.remove('active-view');
+            adminView.classList.add('active-view');
+            
+            changeWelcomeText('System diagnostics normal. Awaiting login.');
+        });
+
+        // Back to Home Click
+        goBackBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                appContainer.classList.remove('slide-active');
+                
+                // Remove active class from both forms
+                studentView.classList.remove('active-view');
+                adminView.classList.remove('active-view');
+                
+                // Activate home view again
+                homeView.classList.add('active-view');
+                
+                changeWelcomeText('Hope you and your family have a great day');
+            });
+        });
+    </script>
+
+</body>
+</html>

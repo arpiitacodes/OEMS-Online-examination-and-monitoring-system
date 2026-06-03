@@ -1,4 +1,4 @@
-# OEMS — Online Exam Management System
+# OEMS — Online Examination & Monitoring System
 ## Complete Windows Setup & Installation Guide
 
 > A step-by-step guide to set up and run the **OEMS Exam System** on a fresh Windows 10/11 machine — for both end users (administrators/proctors) and developers.
@@ -33,7 +33,7 @@
 
 ## 1. Project Overview
 
-**OEMS (Online Exam Management System)** is a secure, proctored online examination platform built for educational institutions. It allows administrators to create exams (MCQ/MSQ or theory), manage students, and monitor results, while students take exams through a locked-down secure browser with **biometric face verification** and **AI-based proctoring**.
+**OEMS (Online Examination & Monitoring System)** is a secure, proctored online examination platform built for educational institutions. It allows administrators to create exams (MCQ/MSQ or theory), manage students, and monitor results, while students take exams through a locked-down secure browser with **biometric face verification** and **AI-based proctoring**.
 
 ### Key Features
 

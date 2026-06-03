@@ -1,4 +1,4 @@
-# OEMS — Online Exam Management System
+# OEMS — Online Examination & Monitoring System
 ## Complete macOS (MacBook) Setup & Installation Guide
 
 > A step-by-step guide to set up and run the **OEMS Exam System** on a fresh macOS machine (Intel or Apple Silicon) — for both end users (administrators/proctors) and developers.
@@ -33,7 +33,7 @@
 
 ## 1. Project Overview
 
-**OEMS (Online Exam Management System)** is a secure, proctored online examination platform built for educational institutions. Administrators create exams (MCQ/MSQ or theory), manage students, and review results; students take exams through a locked-down secure browser with **biometric face verification** and **AI-based proctoring**.
+**OEMS (Online Examination & Monitoring System)** is a secure, proctored online examination platform built for educational institutions. Administrators create exams (MCQ/MSQ or theory), manage students, and review results; students take exams through a locked-down secure browser with **biometric face verification** and **AI-based proctoring**.
 
 > 💡 This project was originally developed and tested on **macOS**, so the Mac path is the most native one — including **CoreML acceleration** for face detection on Apple Silicon and a macOS Electron build target.
 

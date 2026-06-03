@@ -1,14 +1,15 @@
-# OEMS — Online Exam Management System
+# OEMS — Online Examination & Monitoring System
 
-> A secure, AI-proctored online examination platform with ArcFace biometric login, automated theory grading, plagiarism detection, and a kiosk-mode secure browser.
+> A secure, AI-proctored online examination platform with ArcFace biometric login, real-time monitoring, automated theory grading, plagiarism detection, and a kiosk-mode secure browser.
 
-OEMS is a full-stack exam delivery system built for institutions that need to run trustworthy online assessments. It combines password + **face-recognition** authentication, real-time **AI proctoring** (face/phone/gaze monitoring), **SBERT-based** semantic grading of theory answers, **TF-IDF plagiarism** screening, and an **Electron kiosk browser** that locks the student into the exam environment.
+**OEMS (Online Examination & Monitoring System)** is a full-stack exam delivery and proctoring platform built for institutions that need to run trustworthy online assessments. It combines password + **face-recognition** authentication, real-time **AI monitoring/proctoring** (face / phone / gaze detection), **SBERT-based** semantic grading of theory answers, **TF-IDF plagiarism** screening, and an **Electron kiosk browser** that locks the student into the exam environment.
 
 ---
 
 ## Table of Contents
 
 - [Project Overview](#project-overview)
+- [User Roles](#user-roles)
 - [Features](#features)
 - [Technology Stack](#technology-stack)
 - [Architecture Overview](#architecture-overview)
@@ -19,6 +20,7 @@ OEMS is a full-stack exam delivery system built for institutions that need to ru
 - [Face Verification Workflow](#face-verification-workflow)
 - [Authentication Flow](#authentication-flow)
 - [Usage Instructions](#usage-instructions)
+- [Deployment](#deployment)
 - [Security Considerations](#security-considerations)
 - [Troubleshooting](#troubleshooting)
 - [Screenshots](#screenshots)
@@ -34,6 +36,19 @@ OEMS lets administrators create and publish exams (MCQ, MSQ, and theory), enroll
 Grading is fully automated: objective questions (MCQ/MSQ) are scored on submission, while theory answers are evaluated **after the exam window closes** using a Sentence-BERT semantic model — but only after a class-wide plagiarism check clears the submission. Results are compiled into a styled PDF report and emailed to each student automatically.
 
 The platform ships with an **Electron-based secure browser** (kiosk mode) that disables copy/paste, blocks navigation away from the exam, and intercepts dangerous keyboard shortcuts — and a `secure_campus` mode that additionally restricts exams to on-campus IP ranges.
+
+---
+
+## User Roles
+
+OEMS has **two roles**, each with its own login and access scope (enforced by a `@login_required(role)` decorator on every protected route):
+
+| Role | Logs in via | Capabilities |
+|------|-------------|--------------|
+| **Admin** (staff / proctor) | `/admin_login` — Admin ID + password | Create & publish exams, author questions, enroll students (single / bulk CSV), monitor proctoring violation logs, run plagiarism reports, and manage held results (**Release** / **Re-evaluate** / **Disqualify**). Access is **branch-scoped** — an admin sees only their own branch unless their branch is `ALL`. |
+| **Student** | `/` — Admission No + password, then **live face verification** | Take published exams during their window (in the secure browser when required), submit answers, and view/download their own result reports. Students only ever see their own data. |
+
+> The first admin account is seeded directly in the database (Werkzeug-hashed password); see the setup guides. Students are created by admins, who can auto-send welcome emails with credentials.
 
 ---
 
@@ -512,6 +527,63 @@ The kiosk browser launches fullscreen, signs requests with `X-OEMS-Secure-Browse
 
 ---
 
+## Deployment
+
+The Flask app listens on **`127.0.0.1:5000`** by default (`app.run(...)` in [`backend/app.py`](backend/app.py)). For anything beyond local testing, run it behind a production WSGI server and an Nginx reverse proxy.
+
+### Backend (production)
+
+1. **Use a WSGI server** instead of the Flask dev server:
+   ```bash
+   # macOS / Linux
+   pip install gunicorn
+   gunicorn --workers 3 --bind 127.0.0.1:5000 --timeout 120 app:app
+
+   # Windows
+   pip install waitress
+   waitress-serve --listen=127.0.0.1:5000 app:app
+   ```
+   > Note: ML models (ArcFace / YOLO / SBERT) load lazily per process and consume significant memory — size the worker count to your RAM.
+
+2. **Put Nginx in front** as a reverse proxy. The repo ships a reference config, `oems_nginx.conf` (gitignored — adjust the `static`/project paths for your host). Key points it already handles:
+   - Proxies all requests to `http://127.0.0.1:5000`.
+   - Forwards `X-Real-IP` and `X-Forwarded-For` — **required** for the `secure_campus` IP check, which reads `X-Forwarded-For` to determine the real client IP.
+   - Serves static files directly and raises `client_max_body_size` (for CSV/bulk uploads).
+   - Generous proxy timeouts so exam submissions don't time out.
+
+   ```bash
+   # macOS (Homebrew) — drop the config into Nginx's servers dir:
+   cp oems_nginx.conf /opt/homebrew/etc/nginx/servers/oems.conf   # Apple Silicon
+   # or /usr/local/etc/nginx/servers/oems.conf                    # Intel
+   nginx -t && nginx -s reload
+   ```
+
+3. **Enable HTTPS.** Terminate TLS at Nginx (e.g. via Let's Encrypt / Certbot). HTTPS is also required for the browser's `getUserMedia` webcam access in face verification and proctoring on any non-`localhost` host.
+
+4. **Harden Flask sessions** for production: set `SESSION_COOKIE_SECURE=True`, `SESSION_COOKIE_HTTPONLY=True`, and a strong `SECRET_KEY`. Run with `debug=False` (already the default).
+
+5. **Configure `CAMPUS_IP_RANGES`** in `.env` to your institution's real on-campus IP prefixes if you use `secure_campus` exams.
+
+### Secure browser distribution
+
+Package the Electron kiosk browser for distribution to exam machines:
+
+```bash
+cd secure-browser
+npm install
+npm run build        # electron-builder --mac (see package.json)
+```
+
+Set the target server URL in [`secure-browser/main.js`](secure-browser/main.js) (`CONFIG.baseUrl`) to point at your deployed backend before building. The packaged app is what students launch to sit `secure_any` / `secure_campus` exams.
+
+### Operational notes
+
+- **Database:** point `.env` at your production MySQL instance and ensure the schema exists (the app does not create core tables, only the face columns). Restrict DB network access and use a least-privilege user.
+- **Logs:** `logs/` (proctoring/violation logs) may contain student data — keep it off version control (already gitignored) and secure it on disk.
+- **Email:** the Gmail App Password must be valid in the deployed environment, or welcome/OTP/result emails will fail.
+
+---
+
 ## Security Considerations
 
 - **No secrets in the repo.** `SECRET_KEY`, DB credentials, and the Gmail App Password live only in `.env`, which is gitignored. The app refuses to start if `SECRET_KEY` or email credentials are missing.
@@ -583,7 +655,7 @@ This project's **secure browser** component is published under the **MIT License
 
 <div align="center">
 
-**OEMS — Online Examination Management System**
+**OEMS — Online Examination & Monitoring System**
 Built by Anshuman Kumar Singh
 
 </div>

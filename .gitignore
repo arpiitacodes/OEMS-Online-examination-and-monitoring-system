@@ -56,6 +56,10 @@ face_data/
 uploads/
 biometric/
 
+# Proctoring evidence snapshots (contain student images — never push)
+backend/static/evidence/
+static/evidence/
+
 # Node.js / Electron (Secure Browser)
 node_modules/
 secure-browser/node_modules/

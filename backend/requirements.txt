@@ -20,13 +20,18 @@ reportlab==4.4.10
 email-validator==2.3.0
 
 # ── Computer vision / proctoring ──
+# opencv: frame decode, head-pose (solvePnP), quality/anti-spoof stats.
+# ultralytics (YOLOv8n): object detection — phone / book / device / extra person.
 opencv-contrib-python==4.13.0.92
 numpy==2.4.3
 ultralytics==8.4.26
 
-# ── Face recognition (ArcFace login via InsightFace) ──
-# The buffalo_l model pack (~280MB: detection + ArcFace recognition) auto-downloads
-# to ~/.insightface/models on first use. onnxruntime is the inference backend.
+# ── Face detection + recognition (InsightFace) ──
+# Powers BOTH the ArcFace login flow AND the AI proctoring engine
+# (proctor_engine.py): RetinaFace detection + 5-point keypoints for accurate
+# face counting, head-pose/gaze, and identity continuity vs. the enrolled student.
+# The buffalo_l model pack (~280MB) auto-downloads to ~/.insightface/models on
+# first use. onnxruntime is the inference backend.
 insightface==1.0.1
 onnxruntime==1.26.0
 

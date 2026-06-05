@@ -189,6 +189,48 @@ def analyze_frame(bgr):
     }, None
 
 
+def detect_faces(bgr, min_det_score=None):
+    """Detect *all* faces in a frame and return lightweight per-face records.
+
+    Unlike analyze_frame() (which returns the single best face for login), this
+    is the primitive the proctoring engine builds on: it needs every face to
+    count people, plus keypoints for head-pose/gaze. Recognition embeddings are
+    included so the proctor can verify identity continuity against the enrolled
+    student without a second model pass.
+
+    Returns a list of dicts sorted by area (largest first), each with:
+      bbox        -> (x1, y1, x2, y2) ints
+      area        -> int (px²)
+      det_score   -> float
+      kps         -> float32[5,2] | None  (eyes, nose, mouth corners)
+      embedding   -> L2-normalised float32[512] | None
+    """
+    _load_model()
+    if _model is None or bgr is None or bgr.size == 0:
+        return []
+    thr = MIN_DET_SCORE if min_det_score is None else float(min_det_score)
+    out = []
+    for f in _model.get(bgr):
+        if float(getattr(f, "det_score", 0.0)) < thr:
+            continue
+        x1, y1, x2, y2 = [int(v) for v in f.bbox]
+        kps = np.asarray(f.kps, dtype=np.float32) if f.kps is not None else None
+        emb = getattr(f, "normed_embedding", None)
+        if emb is not None:
+            emb = np.asarray(emb, dtype=np.float32)
+            if emb.shape[0] != EMBED_DIM:
+                emb = None
+        out.append({
+            "bbox": (x1, y1, x2, y2),
+            "area": max(0, x2 - x1) * max(0, y2 - y1),
+            "det_score": float(f.det_score),
+            "kps": kps,
+            "embedding": emb,
+        })
+    out.sort(key=lambda d: d["area"], reverse=True)
+    return out
+
+
 def cosine(a, b):
     """Dot product of two already-L2-normalised vectors == cosine similarity."""
     if a is None or b is None:

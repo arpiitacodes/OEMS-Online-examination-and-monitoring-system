@@ -340,17 +340,26 @@ class FortressExam {
         this.aiProctoring  = {{ 'true' if ai_proctoring else 'false' }};
         this.examId        = {{ exam_id }};
 
-        // AI proctoring state
-        this.consecutiveAIFails  = 0;
-        this.maxAllowedFails     = 3;   // 3 consecutive fail frames → 1 violation
-        this.totalFrames         = 0;
-        this.cleanFrames         = 0;
+        // ── AI proctoring is now server-authoritative ──
+        // The backend (proctor_engine) accumulates per-signal confidence over
+        // time and is the single source of truth for whether a camera signal has
+        // escalated to a real violation. The client just reflects the verdict and
+        // counts violations the server reports. No client-side fail counter — that
+        // was the source of the old loop/flicker false positives.
+        this.totalFrames   = 0;
+        this.cleanFrames   = 0;
+        this.lastIntegrity = 100;
+        this.camReady      = false;
 
-        // consecutiveAIFails reset sirf violation count hone ke baad hota hai
-        // clean frames se reset NAHI hota — loop prevent karta hai
+        // Adaptive capture cadence: poll faster when something is building so the
+        // student gets immediate feedback, slower when secure to save CPU/network.
+        this.BASE_INTERVAL = 2500;
+        this.FAST_INTERVAL = 1200;
+        this.curInterval   = this.BASE_INTERVAL;
+        this.inFlight      = false;
 
         this.canvas = document.createElement('canvas');
-        this.canvas.width = 320; this.canvas.height = 240;
+        this.canvas.width = 480; this.canvas.height = 360;
         this.ctx = this.canvas.getContext('2d');
         this.abortCtrl = null;
         this.endTime   = new Date("{{ exam_end }}").getTime();
@@ -364,20 +373,38 @@ class FortressExam {
         btn.textContent = 'Initializing...'; btn.disabled = true;
 
         if (this.aiProctoring) {
+            // Browser capability guard (Safari/Firefox/Chrome all expose this,
+            // but older/embedded webviews may not).
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                this._setCheck('chk-cam', false, 'Camera API unavailable in this browser');
+                alert('This browser does not support camera access. Please use the OEMS Secure Browser or an updated Chrome/Edge.');
+                btn.textContent = 'Unsupported Browser'; btn.disabled = false; return;
+            }
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width:{ideal:640}, height:{ideal:480}, facingMode:'user' },
+                    video: { width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:15,max:24}, facingMode:'user' },
                     audio: false
                 });
-                document.getElementById('proctorVideo').srcObject = stream;
+                this.stream = stream;
+                const video = document.getElementById('proctorVideo');
+                video.srcObject = stream;
+                video.onloadedmetadata = () => { video.play().catch(()=>{}); this.camReady = true; };
                 this._setCheck('chk-cam', true, 'Camera initialized');
             } catch (err) {
-                this._setCheck('chk-cam', false, 'Camera access denied');
-                alert('Camera access is mandatory for this proctored exam.');
-                btn.textContent = 'Camera Denied'; btn.disabled = false; return;
+                const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+                this._setCheck('chk-cam', false, denied ? 'Camera permission denied' : 'No camera found');
+                alert(denied
+                    ? 'Camera access is mandatory for this proctored exam. Please allow the camera and retry.'
+                    : 'No working camera was detected. Connect a webcam and retry.');
+                btn.textContent = 'Retry Camera'; btn.disabled = false; return;
             }
+            // Optional engine readiness probe — informational only.
             this._setCheck('chk-sec', true, 'Secure environment verified');
-            this._setCheck('chk-ai',  true, 'AI proctoring active');
+            try {
+                const h = await fetch('/proctor_health').then(r=>r.json()).catch(()=>null);
+                const ready = h && h.face_detector_ready;
+                this._setCheck('chk-ai', true, ready ? 'AI proctoring engine ready' : 'AI proctoring active');
+            } catch (e) { this._setCheck('chk-ai', true, 'AI proctoring active'); }
         } else {
             this._setCheck('chk-cam', true, 'No proctoring required');
             this._setCheck('chk-sec', true, 'Standard mode active');
@@ -419,71 +446,114 @@ class FortressExam {
     }
 
     // ── PROCTORING ──
+    // Self-scheduling loop (not a fixed setInterval) so the cadence can adapt and
+    // we never stack overlapping requests.
     startProctoring() {
-        this.proctoringInterval = setInterval(() => this._captureFrame(), 3000);
+        const tick = async () => {
+            if (!this.isActive || this.isSubmitted) return;
+            await this._captureFrame();
+            this.proctoringTimer = setTimeout(tick, this.curInterval);
+        };
+        this.proctoringTimer = setTimeout(tick, 1500);
+    }
+
+    _grabFrame() {
+        const video = document.getElementById('proctorVideo');
+        if (!this.camReady || !video || !video.readyState || video.readyState < 2) return null;
+        this.ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
+        return this.canvas.toDataURL('image/jpeg', 0.6);
     }
 
     async _captureFrame() {
-        if (!this.isActive || this.isSubmitted) return;
-        const video = document.getElementById('proctorVideo');
-        if (!video.readyState || video.readyState < 2) return;
+        if (!this.isActive || this.isSubmitted || this.inFlight) return;
+        const imageData = this._grabFrame();
+        if (!imageData) { this._setCameraStatus('Waiting for camera…'); return; }
 
-        this.ctx.drawImage(video, 0, 0, 320, 240);
-        const imageData = this.canvas.toDataURL('image/jpeg', 0.55);
+        this.inFlight = true;
         if (this.abortCtrl) this.abortCtrl.abort();
         this.abortCtrl = new AbortController();
+        // Don't let a slow frame block the loop forever.
+        const killer = setTimeout(() => this.abortCtrl.abort(), 8000);
 
         try {
-            const res  = await fetch('/detect_cheating', { method:'POST', headers:{'Content-Type':'application/json'}, signal:this.abortCtrl.signal, body:JSON.stringify({image:imageData, session:this.sessionId}) });
+            const res = await fetch('/detect_cheating', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                signal:this.abortCtrl.signal,
+                body:JSON.stringify({ image:imageData, exam_id:this.examId, session:this.sessionId })
+            });
             const data = await res.json();
             this.totalFrames++;
+            this._applyVerdict(data);
+        } catch (e) {
+            if (e.name !== 'AbortError') console.warn('[OEMS] Frame skipped:', e.message);
+        } finally {
+            clearTimeout(killer);
+            this.inFlight = false;
+        }
+    }
 
-            if (data.cheating) {
-                const r = (data.reason || '').toLowerCase();
+    // Reflect the server's structured verdict. The server already persisted any
+    // escalated violation; the client increments its visible count to match and
+    // shows contextual feedback.
+    _applyVerdict(data) {
+        const status = (data && data.status) || 'secure';
 
-                // ── Phone → IMMEDIATE violation (no grace) ──
-                if (r.includes('phone') || r.includes('mobile')) {
-                    this._setCameraStatus('⚠ ' + data.reason);
-                    this._updateAIStatus('danger', data.reason);
-                    this.logViolation(data.reason, 1);
-                    // Violation ke baad fresh start: fails reset
-                    this.consecutiveAIFails = 0;
-                }
-                else {
-                    // Multiple faces / Face not visible / eyes / gaze —
-                    // sabke liye same [1/3] counter logic
-                    this.consecutiveAIFails++;
-                    this._setCameraStatus('⚠ ' + (data.reason || 'Alert') + ` [${this.consecutiveAIFails}/${this.maxAllowedFails}]`);
+        // Adapt cadence: poll faster while a signal is building or violating.
+        this.curInterval = (status === 'warning' || status === 'violation')
+            ? this.FAST_INTERVAL : this.BASE_INTERVAL;
 
-                    if (this.consecutiveAIFails >= this.maxAllowedFails) {
-                        // 3 consecutive fails → violation count
-                        this.logViolation(data.reason || 'Suspicious activity', 1);
-                        this._updateAIStatus('danger', data.reason || 'Alert');
-                        this.consecutiveAIFails = 0;
-                    } else {
-                        this._showToast(
-                            `Warning ${this.consecutiveAIFails}/${this.maxAllowedFails}: ${data.reason || 'Face alert'}`,
-                            false
-                        );
-                        this._updateAIStatus('warning', `Violation warning ${this.consecutiveAIFails}/${this.maxAllowedFails}`);
-                    }
-                }
-            } else {
-                // ── Clean frame mila ──
-                // consecutiveAIFails RESET NAHI HOGA clean frame se.
-                // Reset sirf violation count hone ke baad hoga.
-                // Isse student 2-fail + 1-clean + 2-fail loop nahi kar sakta.
-                this.cleanFrames++;
-                this._setCameraStatus('✓ Face detected');
-                this._updateAIStatus('ok', 'Monitoring active');
-            }
-
-            const integrity = this.totalFrames > 0 ? Math.round(this.cleanFrames/this.totalFrames*100) : 100;
-            const fill = document.getElementById('integrityFill');
+        // Integrity bar from server (falls back to local ratio).
+        let integrity = (typeof data.integrity === 'number') ? data.integrity
+            : (this.totalFrames ? Math.round(this.cleanFrames/this.totalFrames*100) : 100);
+        this.lastIntegrity = integrity;
+        const fill = document.getElementById('integrityFill');
+        if (fill) {
             fill.style.width = integrity + '%';
             fill.style.background = integrity>80 ? 'var(--success)' : integrity>50 ? 'var(--warning)' : 'var(--danger)';
+        }
 
-        } catch (e) { if (e.name !== 'AbortError') console.warn('[OEMS] Frame skipped:', e.message); }
+        if (status === 'violation' && Array.isArray(data.violations) && data.violations.length) {
+            // One UI escalation per frame (use the highest-severity signal).
+            const v = data.violations.slice().sort((a,b)=>b.severity-a.severity)[0];
+            this._registerServerViolation(v);
+            this._setCameraStatus('⚠ ' + v.label);
+            this._updateAIStatus('danger', v.label);
+        } else if (status === 'warning' && Array.isArray(data.warnings) && data.warnings.length) {
+            const w = data.warnings.slice().sort((a,b)=>(b.progress||0)-(a.progress||0))[0];
+            const pct = Math.round((w.progress||0)*100);
+            this._setCameraStatus('● ' + w.label + ` (${pct}%)`);
+            this._updateAIStatus('warning', `${w.label} — verifying ${pct}%`);
+        } else if (status === 'unclear') {
+            this._setCameraStatus('Adjust lighting / position');
+            this._updateAIStatus('warning', 'Camera image unclear');
+        } else {
+            this.cleanFrames++;
+            const extra = (data.face_count===1 && data.attention && data.attention!=='center')
+                ? ' · ' + data.attention : '';
+            this._setCameraStatus('✓ Monitoring' + extra);
+            this._updateAIStatus('ok', 'Monitoring active');
+        }
+    }
+
+    // A violation the SERVER already recorded — reflect it in the UI/count and
+    // fire the alert + termination logic, but do NOT re-POST to /log_violation
+    // (that would double-count). Phone/multi-face/identity are critical.
+    _registerServerViolation(v) {
+        if (this.isSubmitted) return;
+        this.warnings += 1;
+        document.getElementById('violCount').textContent = `${this.warnings}/${this.maxWarnings}`;
+        document.getElementById('violChip').textContent  = `${this.warnings} / ${this.maxWarnings} violations`;
+        this._showViolationAlert(v.label, this.warnings);
+        this._beep();
+        if (window.secureBrowser && window.secureBrowser.reportViolation) {
+            window.secureBrowser.reportViolation('ai_' + (v.code||'violation'), v.label);
+        }
+        if (this.warnings >= this.maxWarnings) {
+            fetch('/log_violation', { method:'POST', headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({ exam_id:this.examId, type:'force_terminate', severity:3,
+                    details:'Maximum violations reached — exam terminated' }) }).catch(()=>{});
+            setTimeout(() => this.forceSubmit('Maximum violations reached — exam terminated'), 2200);
+        }
     }
 
     // FIX: Camera status below camera, not overlaid
@@ -503,49 +573,55 @@ class FortressExam {
     }
 
     // ══════════════════════════════════════════════════════
-    // VIOLATION LOGGING — DB store + prominent alert box
+    // CLIENT-EVENT VIOLATION LOGGING — tab switch, devtools, print,
+    // fullscreen exit, focus loss. (Camera/AI violations are recorded
+    // server-side via /detect_cheating and surfaced through _applyVerdict.)
     // ══════════════════════════════════════════════════════
-    logViolation(reason, severity = 1) {
+    logViolation(reason, severity = 1, vtype = 'client_event') {
         if (this.isSubmitted) return;
-        this.warnings += severity;
+        this.warnings += 1;
 
         document.getElementById('violCount').textContent = `${this.warnings}/${this.maxWarnings}`;
         document.getElementById('violChip').textContent  = `${this.warnings} / ${this.maxWarnings} violations`;
 
-        // ── Show prominent violation alert ──
         this._showViolationAlert(reason, this.warnings);
 
-        // ── Store in DB ──
+        // Attach a camera snapshot as evidence when proctoring is on.
+        const evidence = this.aiProctoring ? this._grabFrame() : null;
         fetch('/log_violation', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ exam_id: this.examId, type: 'exam_violation', details: reason })
+            body: JSON.stringify({ exam_id: this.examId, type: vtype, details: reason,
+                                   severity: severity, evidence: evidence })
         }).catch(() => {});
 
-        // Electron IPC
         if (window.secureBrowser && window.secureBrowser.reportViolation) {
-            window.secureBrowser.reportViolation('exam_violation', reason);
+            window.secureBrowser.reportViolation(vtype, reason);
         }
 
-        // Beep sound
+        this._beep();
+
+        if (this.warnings >= this.maxWarnings) {
+            fetch('/log_violation', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ exam_id: this.examId, type: 'force_terminate', severity: 3,
+                    details: 'Maximum violations reached — exam terminated' })
+            }).catch(() => {});
+            setTimeout(() => this.forceSubmit('Maximum violations reached — exam terminated'), 2200);
+        }
+    }
+
+    _beep() {
         try {
-            const ctx=new AudioContext(), osc=ctx.createOscillator(), gain=ctx.createGain();
+            const ctx=new (window.AudioContext||window.webkitAudioContext)();
+            const osc=ctx.createOscillator(), gain=ctx.createGain();
             osc.connect(gain); gain.connect(ctx.destination);
             osc.frequency.value=880;
             gain.gain.setValueAtTime(0.3,ctx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
             osc.start(); osc.stop(ctx.currentTime+0.4);
         } catch(e) {}
-
-        if (this.warnings >= this.maxWarnings) {
-            // Store termination event
-            fetch('/log_violation', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ exam_id: this.examId, type: 'force_terminate', details: 'Maximum violations reached — exam terminated' })
-            }).catch(() => {});
-            setTimeout(() => this.forceSubmit('Maximum violations reached — exam terminated'), 2200);
-        }
     }
 
     // ── Prominent Violation Alert Box ──
@@ -598,6 +674,22 @@ class FortressExam {
         } else if (r.includes('developer') || r.includes('devtool')) {
             alertIcon = '🛠'; alertTitle = 'DEVELOPER TOOLS DETECTED';
             alertDetail = 'Developer tools are not allowed during exam.';
+            isWarning = false;
+        } else if (r.includes('match the enrolled') || r.includes('identity')) {
+            alertIcon = '🪪'; alertTitle = 'IDENTITY MISMATCH';
+            alertDetail = 'The face on camera does not match the enrolled student.';
+            isWarning = false;
+        } else if (r.includes('study material') || r.includes('book')) {
+            alertIcon = '📚'; alertTitle = 'STUDY MATERIAL DETECTED';
+            alertDetail = 'Books or notes are not permitted during the exam.';
+            isWarning = false;
+        } else if (r.includes('unauthorized device') || r.includes('laptop') || r.includes('tablet') || r.includes('device')) {
+            alertIcon = '💻'; alertTitle = 'UNAUTHORIZED DEVICE';
+            alertDetail = 'An additional device was detected in frame. Remove it immediately.';
+            isWarning = false;
+        } else if (r.includes('spoof') || r.includes('photo') || r.includes('screen')) {
+            alertIcon = '🎭'; alertTitle = 'POSSIBLE SPOOF';
+            alertDetail = 'A photo or screen replay may be in use. Show your live face.';
             isWarning = false;
         }
 
@@ -682,7 +774,9 @@ class FortressExam {
     forceSubmit(reason) {
         if (this.isSubmitted) return;
         this.isSubmitted = true; this.isActive = false;
-        clearInterval(this.proctoringInterval); clearInterval(this.timerInterval);
+        clearTimeout(this.proctoringTimer); clearInterval(this.timerInterval);
+        if (this.abortCtrl) { try { this.abortCtrl.abort(); } catch(e){} }
+        this._releaseCamera();
         document.getElementById('termReason').textContent = reason;
         document.getElementById('termSid').textContent    = 'Session: ' + this.sessionId;
         document.getElementById('terminationOverlay').style.display = 'flex';
@@ -690,16 +784,29 @@ class FortressExam {
         setTimeout(() => document.getElementById('examForm').submit(), 3000);
     }
 
+    _releaseCamera() {
+        try { if (this.stream) this.stream.getTracks().forEach(t => t.stop()); } catch(e){}
+    }
+
     // ── SECURITY LISTENERS ──
     _attachSecurityListeners() {
+        // Tab switch / minimize — debounced so one switch isn't double-counted
+        // by visibilitychange + blur firing together.
+        let _lastFocusViol = 0;
+        const focusViolation = (msg) => {
+            const now = Date.now();
+            if (now - _lastFocusViol < 1500) return;
+            _lastFocusViol = now;
+            this.logViolation(msg, 1, 'tab_switch');
+        };
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && this.isActive && !this.isSubmitted)
-                this.logViolation('Tab switch / window minimized detected', 1);
+                focusViolation('Tab switch / window minimized detected');
         });
 
         window.addEventListener('blur', () => {
             if (this.isActive && !this.isSubmitted)
-                this._showToast('Focus lost — stay on exam window', false);
+                this._showToast('Focus lost — return to the exam window', false);
         });
 
         document.addEventListener('keydown', (e) => {
@@ -720,7 +827,7 @@ class FortressExam {
             }
         }, true);
 
-        window.addEventListener('beforeprint', e => { e.preventDefault(); this.logViolation('Print attempt detected', 1); });
+        window.addEventListener('beforeprint', e => { e.preventDefault(); this.logViolation('Print attempt detected', 2, 'print'); });
 
         // DevTools detection — threshold 200px (not 160)
         // 160 was triggering on external monitors / browser toolbars
@@ -737,7 +844,7 @@ class FortressExam {
                 _devToolsFlagCount++;
                 // Require 2 consecutive hits before flagging (debounce)
                 if (_devToolsFlagCount >= 2) {
-                    this.logViolation('Developer tools may be open', 1);
+                    this.logViolation('Developer tools may be open', 2, 'devtools');
                     _devToolsFlagCount = 0;
                 }
             } else {

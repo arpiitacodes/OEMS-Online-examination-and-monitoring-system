@@ -39,10 +39,39 @@
         .b-tab       { background:#fce4ec; color:#c62828; }
         .b-terminate { background:#880e4f; color:white; }
         .b-devtools  { background:#e8eaf6; color:#283593; }
+        .b-identity  { background:#ede7f6; color:#4527a0; }
+        .b-material  { background:#e0f2f1; color:#00695c; }
+        .b-spoof     { background:#fff3e0; color:#bf360c; }
         .b-other     { background:#f5f5f5; color:#555; }
         .adm-chip { font-family:monospace; font-size:0.8rem; background:#e3f2fd; color:#1565c0; padding:2px 8px; border-radius:6px; font-weight:600; }
         .time-text { font-family:monospace; font-size:0.78rem; color:#6c757d; white-space:nowrap; }
         .empty-state { text-align:center; padding:4rem; color:#6c757d; }
+        /* Source + confidence + severity + evidence */
+        .src-chip { font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:20px; }
+        .src-ai     { background:#e8f5e9; color:#2e7d32; }
+        .src-client { background:#eceff1; color:#455a64; }
+        .conf-wrap  { display:flex; align-items:center; gap:6px; min-width:84px; }
+        .conf-track { flex:1; height:5px; background:#eceff1; border-radius:3px; overflow:hidden; }
+        .conf-fill  { height:100%; border-radius:3px; }
+        .conf-val   { font-family:monospace; font-size:0.72rem; color:#6c757d; }
+        .sev-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+        .sev-1 { background:#fbc02d; } .sev-2 { background:#fb8c00; } .sev-3 { background:#e53935; }
+        .ev-thumb { width:54px; height:40px; object-fit:cover; border-radius:6px; border:1px solid #e2e8f0; cursor:pointer; transition:transform 0.15s; background:#f1f5f9; }
+        .ev-thumb:hover { transform:scale(1.04); box-shadow:0 4px 14px rgba(0,0,0,0.18); }
+        .ev-none { color:#cbd5e1; font-size:0.75rem; }
+        /* Risk analytics panel */
+        .risk-panel { background:white; border:1px solid rgba(0,0,0,0.05); border-radius:14px; padding:1.1rem 1.4rem; margin-bottom:1.5rem; box-shadow:0 4px 18px rgba(31,38,135,0.05); }
+        .risk-title { font-size:0.95rem; font-weight:600; color:#2c3e50; margin-bottom:0.9rem; display:flex; align-items:center; gap:8px; }
+        .risk-row { display:flex; align-items:center; gap:12px; padding:7px 0; border-bottom:1px dashed #f0f0f0; font-size:0.83rem; }
+        .risk-row:last-child { border-bottom:none; }
+        .risk-name { font-weight:600; color:#2c3e50; min-width:160px; }
+        .risk-meter { flex:1; height:7px; background:#f1f3f5; border-radius:4px; overflow:hidden; }
+        .risk-meter-fill { height:100%; background:linear-gradient(90deg,#fbc02d,#e53935); border-radius:4px; }
+        .risk-count { font-family:monospace; color:#6c757d; min-width:120px; text-align:right; }
+        .risk-term { color:#b71c1c; font-weight:600; }
+        /* Lightbox */
+        #lightbox { position:fixed; inset:0; background:rgba(0,0,0,0.85); display:none; align-items:center; justify-content:center; z-index:9999; cursor:zoom-out; }
+        #lightbox img { max-width:90vw; max-height:90vh; border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,0.6); }
         @keyframes fadeIn      { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
         @keyframes glowingLine { from{opacity:0.6} to{opacity:1;box-shadow:0 0 12px rgba(0,198,255,0.6)} }
         @media(max-width:768px) { .header-content{flex-direction:column;align-items:flex-start;gap:1rem} td,th{padding:0.65rem 0.7rem} }
@@ -71,6 +100,10 @@
             <div class="stat-lbl">Terminations</div>
         </div>
         <div class="stat">
+            <div class="stat-val" style="color:#2e7d32;">{{ ai_flags }}</div>
+            <div class="stat-lbl">AI Camera Flags</div>
+        </div>
+        <div class="stat">
             <div class="stat-val" style="color:#e65100;">{{ unique_students }}</div>
             <div class="stat-lbl">Students Flagged</div>
         </div>
@@ -80,6 +113,21 @@
         </div>
     </div>
 
+    {% if top_risk %}
+    <div class="risk-panel">
+        <div class="risk-title">⚠️ Highest-Risk Students <span style="font-weight:400;color:#94a3b8;font-size:0.78rem;">(severity-weighted)</span></div>
+        {% set max_w = top_risk[0].weight if top_risk[0].weight > 0 else 1 %}
+        {% for r in top_risk %}
+        <div class="risk-row">
+            <span class="risk-name">{{ r.name }}</span>
+            <span class="adm-chip">{{ r.admission_no }}</span>
+            <div class="risk-meter"><div class="risk-meter-fill" style="width:{{ (r.weight / max_w * 100)|round(0,'floor') }}%;"></div></div>
+            <span class="risk-count">{{ r.count }} event{{ 's' if r.count != 1 else '' }}{% if r.terminated %} · <span class="risk-term">terminated</span>{% endif %}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <div class="toolbar">
         <input class="search-input" id="searchBox" type="text"
                placeholder="Search student name, admission no, exam, details...">
@@ -88,9 +136,16 @@
             <option value="phone">📱 Phone Detected</option>
             <option value="face">👁 Face / Gaze Alert</option>
             <option value="multiple">👥 Multiple Faces</option>
+            <option value="identity">🪪 Identity Mismatch</option>
+            <option value="material">📚 Study Material</option>
             <option value="tab">🔄 Tab Switch</option>
             <option value="terminate">🚫 Terminated</option>
             <option value="devtool">🛠 DevTools</option>
+        </select>
+        <select class="filter-sel" id="sourceFilter" onchange="filterTable()">
+            <option value="">All Sources</option>
+            <option value="src-ai">🤖 AI Camera</option>
+            <option value="src-client">🖥 Browser</option>
         </select>
         <select class="filter-sel" id="examFilter" onchange="filterTable()">
             <option value="">All Exams</option>
@@ -117,16 +172,23 @@
                     <th>Admission No</th>
                     <th>Exam</th>
                     <th>Type</th>
+                    <th>Source</th>
+                    <th>Confidence</th>
                     <th>Details</th>
+                    <th>Evidence</th>
                 </tr>
             </thead>
             <tbody id="logBody">
                 {% for l in logs %}
                 {% set d = (l.details or '') | lower %}
-                <tr data-text="{{ l.student_name|lower }} {{ l.admission_no|lower }} {{ l.exam_title|lower }} {{ d }} {{ l.violation_type|lower }}">
+                {% set sev = l.severity or 1 %}
+                {% set conf = (l.confidence * 100)|round(0,'floor') if l.confidence is not none else None %}
+                <tr data-text="{{ l.student_name|lower }} {{ l.admission_no|lower }} {{ l.exam_title|lower }} {{ d }} {{ l.violation_type|lower }} {{ 'src-ai' if l.source == 'ai' else 'src-client' }}">
                     <td style="color:#bbb;font-size:0.78rem;">{{ loop.index }}</td>
                     <td><span class="time-text">{{ l.created_at.strftime('%d %b %Y, %H:%M:%S') if l.created_at else '—' }}</span></td>
-                    <td style="font-weight:600;color:#2c3e50;white-space:nowrap;">{{ l.student_name }}</td>
+                    <td style="font-weight:600;color:#2c3e50;white-space:nowrap;">
+                        <span class="sev-dot sev-{{ sev }}" title="Severity {{ sev }}"></span>{{ l.student_name }}
+                    </td>
                     <td><span class="adm-chip">{{ l.admission_no }}</span></td>
                     <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ l.exam_title }}">{{ l.exam_title }}</td>
                     <td>
@@ -134,9 +196,15 @@
                             <span class="badge b-terminate">🚫 Terminated</span>
                         {% elif 'phone' in d or 'mobile' in d %}
                             <span class="badge b-phone">📱 Phone</span>
+                        {% elif 'identity' in d or 'enrolled student' in d %}
+                            <span class="badge b-identity">🪪 Identity</span>
                         {% elif 'multiple' in d or 'faces' in d %}
                             <span class="badge b-multiple">👥 Multi-Face</span>
-                        {% elif 'face not' in d or 'eyes' in d or 'looking' in d %}
+                        {% elif 'study material' in d or 'book' in d %}
+                            <span class="badge b-material">📚 Material</span>
+                        {% elif 'spoof' in d %}
+                            <span class="badge b-spoof">🎭 Spoof</span>
+                        {% elif 'face' in d or 'looking' in d or 'gaze' in d %}
                             <span class="badge b-face">👁 Face/Gaze</span>
                         {% elif 'tab' in d or 'switch' in d or 'minimized' in d %}
                             <span class="badge b-tab">🔄 Tab Switch</span>
@@ -146,7 +214,27 @@
                             <span class="badge b-other">⚠ {{ l.violation_type[:18] }}</span>
                         {% endif %}
                     </td>
-                    <td style="max-width:280px;color:#374151;">{{ l.details or '—' }}</td>
+                    <td>
+                        {% if l.source == 'ai' %}
+                            <span class="src-chip src-ai">🤖 AI</span>
+                        {% else %}
+                            <span class="src-chip src-client">🖥 Browser</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if conf is not none %}
+                        <div class="conf-wrap">
+                            <div class="conf-track"><div class="conf-fill" style="width:{{ conf }}%;background:{{ '#e53935' if conf >= 80 else '#fb8c00' if conf >= 60 else '#fbc02d' }};"></div></div>
+                            <span class="conf-val">{{ conf }}%</span>
+                        </div>
+                        {% else %}<span class="ev-none">—</span>{% endif %}
+                    </td>
+                    <td style="max-width:240px;color:#374151;">{{ l.details or '—' }}</td>
+                    <td>
+                        {% if l.evidence %}
+                            <img class="ev-thumb" src="{{ url_for('static', filename=l.evidence) }}" alt="evidence" onclick="showEvidence(this.src)" loading="lazy">
+                        {% else %}<span class="ev-none">—</span>{% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -160,6 +248,7 @@
         {% endif %}
     </div>
 </div>
+<div id="lightbox" onclick="this.style.display='none'"><img id="lightboxImg" src="" alt="evidence"></div>
 <script>
     document.getElementById('searchBox').addEventListener('input', filterTable);
 
@@ -167,15 +256,22 @@
         const q      = document.getElementById('searchBox').value.toLowerCase();
         const type   = document.getElementById('typeFilter').value.toLowerCase();
         const exam   = document.getElementById('examFilter').value.toLowerCase();
+        const source = document.getElementById('sourceFilter').value.toLowerCase();
         const rows   = document.querySelectorAll('#logBody tr');
         let visible  = 0;
         rows.forEach(row => {
             const t  = row.dataset.text || '';
-            const ok = (!q || t.includes(q)) && (!type || t.includes(type)) && (!exam || t.includes(exam));
+            const ok = (!q || t.includes(q)) && (!type || t.includes(type))
+                     && (!exam || t.includes(exam)) && (!source || t.includes(source));
             row.style.display = ok ? '' : 'none';
             if (ok) visible++;
         });
         document.getElementById('recordCount').textContent = visible + ' entries';
+    }
+
+    function showEvidence(src) {
+        document.getElementById('lightboxImg').src = src;
+        document.getElementById('lightbox').style.display = 'flex';
     }
 </script>
 </body>

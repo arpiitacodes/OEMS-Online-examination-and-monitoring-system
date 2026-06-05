@@ -58,6 +58,7 @@ def get_db_connection():
 # Recognition tunables (thresholds, min size, model pack) live in face_engine.py.
 # These are flow/session-level knobs for the login challenge.
 import face_engine
+import proctor_engine
 
 FACE_AUTH_WINDOW_SECONDS = int(os.environ.get("FACE_AUTH_WINDOW_SECONDS", "600"))
 # How many clean ArcFace embeddings to average before deciding register/verify.
@@ -957,6 +958,9 @@ def student_face_frame():
         cursor.close(); conn.close()
         session.pop("pending_student_auth", None)
         _clear_face_session(student_id)
+        # New enrolment → drop any cached embedding so proctoring identity
+        # checks pick up the fresh face immediately.
+        _enrolled_emb_cache.pop(student_id, None)
         return jsonify({
             "ok": True, "state": "registered", "done": True, "relogin": True,
             "message": "Face registered successfully. Please log in again to continue.",
@@ -2101,227 +2105,217 @@ def disqualify_result(student_id, exam_id):
 
 cv2 = None
 np = None
-phone_model = None
-face_cascade_default = None
-face_cascade_alt2 = None
-face_cascade_profile = None
 eye_cascade = None
-_clahe = None
 _cv_initialized = False
 
 def _ensure_cv_loaded():
-    global cv2, np, phone_model, face_cascade_default, face_cascade_alt2
-    global face_cascade_profile, eye_cascade, _clahe, _cv_initialized
+    """Lazily import OpenCV/numpy and the one Haar cascade the *login* blink
+    challenge still uses. Proctoring face/object detection lives in
+    proctor_engine.py (InsightFace + YOLO) and does not depend on this."""
+    global cv2, np, eye_cascade, _cv_initialized
     if _cv_initialized:
         return
     import cv2 as _cv2
     import numpy as _np
     cv2 = _cv2
     np = _np
-    try:
-        from ultralytics import YOLO as _YOLO
-        phone_model = _YOLO("yolov8n.pt")
-    except Exception as e:
-        print("YOLO Load Error:", e)
-        phone_model = None
-    _cascade_dir = cv2.data.haarcascades
-    face_cascade_default = cv2.CascadeClassifier(_cascade_dir + 'haarcascade_frontalface_default.xml')
-    face_cascade_alt2    = cv2.CascadeClassifier(_cascade_dir + 'haarcascade_frontalface_alt2.xml')
-    face_cascade_profile = cv2.CascadeClassifier(_cascade_dir + 'haarcascade_profileface.xml')
-    eye_cascade          = cv2.CascadeClassifier(_cascade_dir + 'haarcascade_eye.xml')
-    _clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    eye_cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + 'haarcascade_eye.xml')
     _cv_initialized = True
 
-def _detect_all_faces(gray):
-    _ensure_cv_loaded()
-    gray_eq = _clahe.apply(gray)  # CLAHE contrast enhance
+# ── PROCTORING SCHEMA MIGRATION ──────────────────────────────────────────────
+# Adds confidence/severity/source/evidence columns to exam_violations so the new
+# engine can store rich, auditable records. Migration-safe: old DBs upgrade lazily.
+_violation_schema_checked = False
+_violation_schema_lock = threading.Lock()
 
-    # ── PASS 1: Strict frontal detection (primary) ──
-    # minNeighbors=5 → strict, fewer false positives
-    faces_frontal = face_cascade_default.detectMultiScale(
-        gray_eq,
-        scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(60, 60),
-        flags=cv2.CASCADE_SCALE_IMAGE
-    )
+# Where client-/server-captured evidence snapshots are written. Served back to
+# admins on the violation log page.
+EVIDENCE_DIR = os.environ.get(
+    "OEMS_EVIDENCE_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "evidence")
+)
 
-    # ── PASS 2: Alt2 cascade for partial/slightly turned faces ──
-    faces_alt2 = face_cascade_alt2.detectMultiScale(
-        gray_eq,
-        scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(60, 60),
-        flags=cv2.CASCADE_SCALE_IMAGE
-    )
 
-    # Combine frontal detections
-    all_frontal = []
-    if len(faces_frontal) > 0: all_frontal.extend(faces_frontal.tolist())
-    if len(faces_alt2)    > 0: all_frontal.extend(faces_alt2.tolist())
+def ensure_violation_schema():
+    global _violation_schema_checked
+    if _violation_schema_checked:
+        return
+    with _violation_schema_lock:
+        if _violation_schema_checked:
+            return
+        conn = cursor = None
+        try:
+            os.makedirs(EVIDENCE_DIR, exist_ok=True)
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            for col, ddl in [
+                ("severity",    "ALTER TABLE exam_violations ADD COLUMN severity TINYINT NOT NULL DEFAULT 1"),
+                ("confidence",  "ALTER TABLE exam_violations ADD COLUMN confidence FLOAT NULL"),
+                ("source",      "ALTER TABLE exam_violations ADD COLUMN source VARCHAR(20) NOT NULL DEFAULT 'client'"),
+                ("evidence",    "ALTER TABLE exam_violations ADD COLUMN evidence VARCHAR(255) NULL"),
+            ]:
+                cursor.execute(f"SHOW COLUMNS FROM exam_violations LIKE '{col}'")
+                if not cursor.fetchone():
+                    cursor.execute(ddl)
+                    print(f"[Proctor] Added exam_violations.{col} column")
+            # Index helps the dashboard's per-student / per-exam aggregation.
+            cursor.execute("SHOW INDEX FROM exam_violations WHERE Key_name='idx_violation_lookup'")
+            if not cursor.fetchone():
+                cursor.execute("CREATE INDEX idx_violation_lookup ON exam_violations (exam_id, student_id, violation_type)")
+            conn.commit()
+            _violation_schema_checked = True
+        except Exception as e:
+            print(f"[Proctor] Violation schema check failed: {e}")
+        finally:
+            if cursor: cursor.close()
+            if conn: conn.close()
 
-    # Deduplicate frontal detections (same face from 2 cascades)
-    frontal_unique = _dedup_rects(all_frontal, iou_threshold=0.3)
 
-    # ── PASS 3: Profile cascade — ONLY if frontal found 0 faces ──
-    # This avoids double-counting: turned head seen by both frontal
-    # (partial) AND profile cascade = false "2 faces"
-    if len(frontal_unique) == 0:
-        # Student may be in profile — check profile cascade
-        faces_profile_l = face_cascade_profile.detectMultiScale(
-            gray_eq, scaleFactor=1.1, minNeighbors=5,
-            minSize=(60, 60), flags=cv2.CASCADE_SCALE_IMAGE
+def _save_evidence(image_data_url, student_id, exam_id, code):
+    """Persist a JPEG snapshot of the offending frame; return the relative path
+    (or None). Best-effort — a failed write must never block violation logging."""
+    if not image_data_url or "," not in image_data_url:
+        return None
+    try:
+        os.makedirs(EVIDENCE_DIR, exist_ok=True)
+        raw = base64.b64decode(image_data_url.split(",", 1)[1])
+        if len(raw) > 600_000:  # guard against oversized payloads
+            return None
+        fname = f"v_{exam_id}_{student_id}_{int(time.time()*1000)}_{re.sub(r'[^a-z0-9]+','',str(code).lower())[:16]}.jpg"
+        with open(os.path.join(EVIDENCE_DIR, fname), "wb") as fh:
+            fh.write(raw)
+        return f"evidence/{fname}"
+    except Exception as e:
+        print(f"[Proctor] Evidence save failed: {e}")
+        return None
+
+
+def _store_violation(student_id, exam_id, v_type, details, severity=1,
+                     confidence=None, source="client", evidence=None):
+    """Single insert path for every violation, AI or client-side."""
+    ensure_violation_schema()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO exam_violations "
+            "(student_id, exam_id, violation_type, details, severity, confidence, source, evidence) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            (student_id, exam_id, str(v_type)[:100], str(details)[:500],
+             int(severity), confidence, str(source)[:20], evidence)
         )
-        gray_flip = cv2.flip(gray_eq, 1)
-        faces_profile_r = face_cascade_profile.detectMultiScale(
-            gray_flip, scaleFactor=1.1, minNeighbors=5,
-            minSize=(60, 60), flags=cv2.CASCADE_SCALE_IMAGE
-        )
-        profile_rects = []
-        if len(faces_profile_l) > 0:
-            profile_rects.extend(faces_profile_l.tolist())
-        if len(faces_profile_r) > 0:
-            h, w = gray.shape
-            for (x, y, fw, fh) in faces_profile_r.tolist():
-                profile_rects.append([w - x - fw, y, fw, fh])
+        conn.commit()
+    finally:
+        cursor.close(); conn.close()
 
-        if profile_rects:
-            return _dedup_rects(profile_rects, iou_threshold=0.3)
-        return []
-
-    return frontal_unique
-
-
-def _dedup_rects(rects, iou_threshold=0.3):
-    """
-    IoU-based deduplication of face rectangles.
-    Merges overlapping detections from different cascades.
-    """
-    if not rects:
-        return []
-
-    unique = []
-    for rect in rects:
-        x1, y1, w1, h1 = rect
-        is_dup = False
-        for ux, uy, uw, uh in unique:
-            ix = max(x1, ux);          iy = max(y1, uy)
-            iw = min(x1+w1, ux+uw) - ix
-            ih = min(y1+h1, uy+uh) - iy
-            if iw > 0 and ih > 0:
-                inter   = iw * ih
-                union   = w1*h1 + uw*uh - inter
-                iou     = inter / union if union > 0 else 0
-                if iou > iou_threshold:
-                    is_dup = True
-                    break
-        if not is_dup:
-            unique.append(rect)
-    return unique
 
 # ── LOG VIOLATION (called from JS/Electron during exam)
 @app.route("/log_violation", methods=["POST"])
 @login_required("student")
 def log_violation():
-    """Store violation into DB — called by start_exam.html JS"""
+    """Store a client-detected violation (tab switch, devtools, print, focus
+    loss, fullscreen exit). AI camera violations come through /detect_cheating."""
     try:
         data       = request.get_json() or {}
         student_id = session.get("student_id")
         exam_id    = data.get("exam_id")
-        v_type     = str(data.get("type",    "unknown"))[:100]
+        v_type     = str(data.get("type", "unknown"))[:100]
         details    = str(data.get("details", ""))[:500]
+        severity   = int(data.get("severity", 1) or 1)
         if not student_id or not exam_id:
             return jsonify({"ok": False}), 400
-        conn   = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO exam_violations (student_id, exam_id, violation_type, details) VALUES (%s,%s,%s,%s)",
-            (student_id, exam_id, v_type, details)
-        )
-        conn.commit(); cursor.close(); conn.close()
+        evidence = _save_evidence(data.get("evidence"), student_id, exam_id, v_type) \
+            if data.get("evidence") else None
+        _store_violation(student_id, exam_id, v_type, details,
+                         severity=severity, source="client", evidence=evidence)
         return jsonify({"ok": True})
     except Exception as e:
         print(f"[Violation] DB error: {e}")
         return jsonify({"ok": False}), 500
 
-# ── AI PROCTORING — DETECT CHEATING
+
+def _get_enrolled_embedding(student_id):
+    """Fetch the student's enrolled ArcFace embedding for identity continuity.
+    Cached per process to avoid a DB hit on every frame."""
+    cached = _enrolled_emb_cache.get(student_id)
+    if cached is not None:
+        return cached if cached is not False else None
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT face_embedding_v2 FROM students WHERE id=%s", (student_id,))
+        row = cursor.fetchone()
+    except Exception:
+        row = None
+    finally:
+        cursor.close(); conn.close()
+    emb = face_engine.deserialize(row.get("face_embedding_v2")) if row else None
+    _enrolled_emb_cache[student_id] = emb if emb is not None else False
+    return emb
+
+
+_enrolled_emb_cache = {}
+
+
+# ── AI PROCTORING — DETECT CHEATING (engine-backed, temporal, confidence-scored)
 @app.route("/detect_cheating", methods=["POST"])
 @login_required("student")
 def detect_cheating():
-    if "student_id" not in session:
-        return jsonify({"cheating": False}), 401
+    """Analyse one proctoring frame. The heavy lifting (InsightFace detection,
+    real head-pose, identity, anti-spoof, YOLO objects) and the temporal
+    confidence accumulation live in proctor_engine; this route owns auth, frame
+    decode, persistence of escalated violations, and the JSON contract with the
+    client. Any escalated violation is stored server-side here so the count can
+    never be tampered with from the browser."""
     _ensure_cv_loaded()
+    student_id = session.get("student_id")
+    if not student_id:
+        return jsonify({"ok": False, "status": "secure"}), 401
     try:
-        data = request.json
-        if not data or "image" not in data:
-            return jsonify({"cheating": False})
-        image_bytes = base64.b64decode(data["image"].split(",")[1])
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img is None:
-            return jsonify({"cheating": False})
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        data = request.get_json(silent=True) or {}
+        exam_id = data.get("exam_id")
+        image = data.get("image")
+        if not image:
+            return jsonify({"ok": False, "status": "secure"})
 
-        # ── STEP 1: Phone check PEHLE (face check se pehle)
-        # Agar phone check baad mein ho toh face-not-visible pe return ho jaata
-        # aur phone kabhi detect nahi hota
-        if phone_model is not None:
-            try:
-                for result in phone_model(img, verbose=False, conf=0.28):
-                    for box in result.boxes:
-                        cls_name = phone_model.names[int(box.cls)].lower()
-                        if any(k in cls_name for k in ["cell phone", "mobile", "phone"]):
-                            return jsonify({"cheating": True, "reason": "Mobile phone detected"})
-            except Exception as pe:
-                print(f"[Phone Detection] Error: {pe}")
+        frame, decode_err = _decode_base64_frame(image)
+        if decode_err or frame is None:
+            return jsonify({"ok": True, "status": "unclear",
+                            "message": "Camera frame unreadable."})
 
-        # ── STEP 2: Multi-cascade face detection
-        # _detect_all_faces uses 4 cascades (frontal default + alt2 + profile L/R)
-        # + CLAHE preprocessing + NMS deduplication
-        faces = _detect_all_faces(gray)
+        session_key = f"{student_id}:{exam_id}"
+        enrolled = _get_enrolled_embedding(student_id) if exam_id else None
+        verdict = proctor_engine.process_frame(session_key, frame, enrolled_embedding=enrolled)
 
-        if len(faces) == 0:
-            return jsonify({"cheating": True, "reason": "Face not visible"})
+        # Persist any escalated violation server-side (authoritative count).
+        if verdict["violations"] and exam_id:
+            evidence = _save_evidence(image, student_id, exam_id,
+                                      verdict["violations"][0]["code"])
+            for v in verdict["violations"]:
+                try:
+                    _store_violation(
+                        student_id, exam_id, v["code"], v["label"],
+                        severity=v["severity"], confidence=v["confidence"],
+                        source="ai", evidence=evidence,
+                    )
+                except Exception as se:
+                    print(f"[Proctor] violation store failed: {se}")
 
-        if len(faces) > 1:
-            return jsonify({"cheating": True, "reason": f"Multiple people detected ({len(faces)} faces)"})
-
-        # ── STEP 3: Eye + gaze check on the single detected face ──
-        x, y, w, h = faces[0]
-        # Clamp to image bounds
-        x, y = max(0, x), max(0, y)
-        w = min(w, img.shape[1] - x)
-        h = min(h, img.shape[0] - y)
-
-        face_roi = gray[y:y+h, x:x+w]
-        if face_roi.size == 0:
-            return jsonify({"cheating": False})
-
-        eyes = eye_cascade.detectMultiScale(
-            face_roi, scaleFactor=1.1, minNeighbors=4, minSize=(18, 18)
-        )
-        if len(eyes) == 0:
-            return jsonify({"cheating": True, "reason": "Eyes not visible"})
-
-        img_cx = img.shape[1] / 2
-        img_cy = img.shape[0] / 2
-        face_cx = x + w / 2
-        face_cy = y + h / 2
-        x_offset = (face_cx - img_cx) / img_cx
-        y_offset = (face_cy - img_cy) / img_cy
-
-        # Gaze threshold 0.40 — production calibrated
-        # 0.30 was too strict → normal slight head turns = false violation
-        # 0.40 = student must look clearly off-screen to trigger
-        if x_offset >  0.40: return jsonify({"cheating": True, "reason": "Looking Right"})
-        if x_offset < -0.40: return jsonify({"cheating": True, "reason": "Looking Left"})
-        if y_offset >  0.40: return jsonify({"cheating": True, "reason": "Looking Down"})
-        if y_offset < -0.40: return jsonify({"cheating": True, "reason": "Looking Up"})
-
-        return jsonify({"cheating": False})
+        return jsonify({"ok": True, **verdict})
     except Exception as e:
-        print("AI Error:", e)
-        return jsonify({"cheating": False})
+        print("[Proctor] detect_cheating error:", e)
+        # Fail open: a server hiccup must never falsely terminate an exam.
+        return jsonify({"ok": False, "status": "secure"})
+
+
+# ── PROCTORING HEALTH (gatekeeper readiness check)
+@app.route("/proctor_health")
+def proctor_health():
+    try:
+        return jsonify({"ok": True, **proctor_engine.engine_status()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ================================================================
@@ -2736,48 +2730,60 @@ def student_result(exam_id):
 @app.route("/violation_logs")
 @login_required("admin")
 def violation_logs():
+    ensure_violation_schema()  # guarantees the enriched columns exist
     admin_branch = session.get("admin_branch")
     conn   = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    base_select = """
+        SELECT v.id, v.student_id, v.exam_id, v.violation_type,
+               v.details, v.created_at,
+               COALESCE(v.severity, 1)      AS severity,
+               v.confidence                 AS confidence,
+               COALESCE(v.source, 'client') AS source,
+               v.evidence                   AS evidence,
+               s.name AS student_name, s.admission_no,
+               s.program, s.branch, s.semester,
+               e.title AS exam_title
+        FROM exam_violations v
+        JOIN students s ON v.student_id = s.id
+        JOIN exams    e ON v.exam_id    = e.id
+    """
     if admin_branch == "ALL":
-        cursor.execute("""
-            SELECT v.id, v.student_id, v.exam_id, v.violation_type,
-                   v.details, v.created_at,
-                   s.name AS student_name, s.admission_no,
-                   s.program, s.branch, s.semester,
-                   e.title AS exam_title
-            FROM exam_violations v
-            JOIN students s ON v.student_id = s.id
-            JOIN exams    e ON v.exam_id    = e.id
-            ORDER BY v.created_at DESC
-        """)
+        cursor.execute(base_select + " ORDER BY v.created_at DESC")
     else:
-        cursor.execute("""
-            SELECT v.id, v.student_id, v.exam_id, v.violation_type,
-                   v.details, v.created_at,
-                   s.name AS student_name, s.admission_no,
-                   s.program, s.branch, s.semester,
-                   e.title AS exam_title
-            FROM exam_violations v
-            JOIN students s ON v.student_id = s.id
-            JOIN exams    e ON v.exam_id    = e.id
-            WHERE e.branch = %s
-            ORDER BY v.created_at DESC
-        """, (admin_branch,))
+        cursor.execute(base_select + " WHERE e.branch = %s ORDER BY v.created_at DESC", (admin_branch,))
     logs = cursor.fetchall()
     cursor.close(); conn.close()
 
     total_violations = len(logs)
     terminations     = sum(1 for l in logs if l['violation_type'] == 'force_terminate')
+    ai_flags         = sum(1 for l in logs if l.get('source') == 'ai')
     unique_students  = len(set(l['student_id'] for l in logs))
     unique_exams     = len(set(l['exam_id']    for l in logs))
+
+    # Per-student risk ranking for the analytics panel: students with the most
+    # (severity-weighted) violations bubble to the top for review.
+    risk = {}
+    for l in logs:
+        key = (l['student_id'], l['student_name'], l['admission_no'])
+        r = risk.setdefault(key, {"count": 0, "weight": 0, "terminated": False})
+        r["count"] += 1
+        r["weight"] += int(l.get('severity') or 1)
+        if l['violation_type'] == 'force_terminate':
+            r["terminated"] = True
+    top_risk = sorted(
+        ({"name": k[1], "admission_no": k[2], **v} for k, v in risk.items()),
+        key=lambda x: (x["terminated"], x["weight"]), reverse=True
+    )[:8]
 
     return render_template("violation_logs.html",
         logs=logs,
         total_violations=total_violations,
         terminations=terminations,
+        ai_flags=ai_flags,
         unique_students=unique_students,
-        unique_exams=unique_exams
+        unique_exams=unique_exams,
+        top_risk=top_risk,
     )
 
 # ── LOGOUT

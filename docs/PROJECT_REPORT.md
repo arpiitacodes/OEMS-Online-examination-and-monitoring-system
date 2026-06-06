@@ -90,7 +90,7 @@ The project set out to achieve the following measurable objectives:
 - ArcFace face enrolment + verification with blink/turn liveness and duplicate-face prevention.
 - Real-time AI proctoring with temporal escalation and evidence capture.
 - Automated grading (objective + SBERT theory) and TF-IDF plagiarism with admin hold/release/disqualify controls.
-- Email notifications: welcome credentials, exam alerts, OTP for email/password changes, result PDF, and hold notices.
+- Email notifications: welcome credentials, **one-time face-registration confirmation**, exam alerts, OTP for email/password changes, result PDF, and hold notices.
 - PDF result reports (ReportLab) with question-wise analysis, grade, and feedback.
 - An Electron kiosk browser and an optional Nginx reverse-proxy front.
 
@@ -123,7 +123,7 @@ OEMS follows a classic **server-authoritative, layered web architecture**. The b
                       └───────────┬──────────────┘
                                   ▼
                       ┌──────────────────────────┐
-                      │   Flask App (app.py)      │
+                      │   Flask App (oems.py)     │
                       │  ─ Auth & sessions        │
                       │  ─ Exam delivery          │
                       │  ─ Proctoring API         │
@@ -153,7 +153,7 @@ OEMS follows a classic **server-authoritative, layered web architecture**. The b
 |---|---|---|
 | **Presentation** | UI rendering, client-side exam runner, camera capture, client-event violation detection | Jinja2 server-rendered templates + vanilla JavaScript |
 | **Secure client** | Kiosk lockdown, navigation/shortcut blocking, browser-signature header | Electron `main.js` + `preload.js` |
-| **Application** | Routing, sessions, auth, exam flow, orchestration of ML engines, email/PDF | `app.py` (Flask) |
+| **Application** | Routing, sessions, auth, exam flow, orchestration of ML engines, email/PDF | `oems.py` (Flask) |
 | **Domain / AI** | Face recognition, proctoring CV, semantic grading, plagiarism | `face_engine.py`, `proctor_engine.py`, SBERT, scikit-learn |
 | **Persistence** | Relational storage with pooled connections | MySQL via `mysql-connector-python` |
 | **Integration** | Outbound email (SMTP), optional reverse proxy | `smtplib`, Nginx |
@@ -184,7 +184,7 @@ Each technology below was chosen for a specific reason, documented here for eval
 | **Theory grading** | Sentence-Transformers (SBERT) 5.3.0 `all-MiniLM-L6-v2`, scikit-learn 1.8.0, PyTorch 2.11 | `all-MiniLM-L6-v2` is a small, fast, high-quality sentence-embedding model. Cosine similarity between the model answer and the student answer gives a **semantic** score that rewards meaning, not exact keyword matching — far better than string overlap for descriptive answers. |
 | **Plagiarism** | scikit-learn `TfidfVectorizer` + cosine similarity | TF-IDF + cosine is the standard, explainable baseline for textual similarity across documents and needs no training — appropriate for comparing all students' descriptive answers pairwise. |
 | **PDF reports** | ReportLab 4.4.10 | Generates a styled, multi-section A4 result PDF (student details, question-wise analysis, performance summary, grade, feedback) entirely in memory for emailing. |
-| **Email / OTP** | Gmail SMTP over `smtplib` + `email` MIME, `email-validator` 2.3.0 | Reliable transactional email using a Google **App Password** (never the account password). Used for welcome credentials, exam alerts, OTP, result PDFs, and hold notices. |
+| **Email / OTP** | Gmail SMTP over `smtplib` + `email` MIME, `email-validator` 2.3.0 | Reliable transactional email using a Google **App Password** (never the account password). Used for welcome credentials, **one-time face-registration confirmation**, exam alerts, OTP, result PDFs, and hold notices. Transactional sends use `send_with_retry` (configurable linear backoff) and are dispatched off-request on daemon threads. |
 | **Secure browser** | Electron 28 + Node 18+, Axios | Electron gives a Chromium webview that can be locked into **kiosk + fullscreen + alwaysOnTop**, with `globalShortcut` blocking, navigation allow-listing, and a unique `X-OEMS-Secure-Browser` request header the server can require. |
 | **Frontend** | Jinja2 + vanilla JavaScript | Server-side rendering keeps the trust boundary on the server; no heavy SPA framework is needed. The exam runner and client-event proctoring are hand-written vanilla JS. |
 | **Reverse proxy** | Nginx (optional) | Serves static files, forwards `X-Forwarded-For` (so the server can read the real client IP for campus enforcement), and sets generous timeouts for exam submission. |
@@ -236,6 +236,9 @@ students ──1:N──> answers <──N:1── questions ──N:1──> ex
 | `face_embedding_v2` | MEDIUMBLOB | ArcFace 512-d float32 (2048 bytes) |
 | `face_registered` | TINYINT(1) | 0/1 enrolment flag |
 | `face_registered_at` | DATETIME | |
+| `face_reg_email_status` | TINYINT(1) | Confirmation-email state / duplicate guard: 0 unsent, 1 sending, 2 sent, 3 failed |
+| `face_reg_email_attempts` | INT | Send claims made |
+| `face_reg_email_sent_at` | DATETIME | When confirmation email was delivered |
 
 **`exams`**
 
@@ -380,7 +383,7 @@ All three are protected by a session-based `@rate_limit` decorator (e.g. 5 attem
 
 ## 9. Face Verification Workflow
 
-Biometric identity is implemented in `face_engine.py` (pure CV/NumPy) and orchestrated by the login routes in `app.py`. The browser only streams frames; **the server is authoritative** for every decision.
+Biometric identity is implemented in `face_engine.py` (pure CV/NumPy) and orchestrated by the login routes in `oems.py`. The browser only streams frames; **the server is authoritative** for every decision.
 
 ### 9.1 The Engine (`face_engine.py`)
 
@@ -402,7 +405,12 @@ When FACE_REGISTER_FRAMES (6) clean frames + liveness pass:
   ├─ average + re-normalize the embeddings → stable identity vector
   ├─ DUPLICATE-FACE SCAN against every other account
   │     └─ if cosine ≥ FACE_DUPLICATE_THRESHOLD (0.55) → REJECT (anti-sharing)
-  ├─ store vector in students.face_embedding_v2, set face_registered=1
+  ├─ store vector in students.face_embedding_v2, set face_registered=1, commit
+  ├─ re-read the row to VERIFY the enrolment persisted
+  ├─ send a ONE-TIME face-registration confirmation email
+  │     ├─ atomic DB claim (face_reg_email_status 0/3 → 1) = exactly-once guard
+  │     ├─ background send with linear-backoff retries on SMTP failure
+  │     └─ NO biometric data in the email (name, admission no, time, status only)
   └─ ask the student to log in again
 ```
 
@@ -441,7 +449,7 @@ Because the liveness state machine lives in the server-side session, the client 
 
 ## 10. Module Descriptions
 
-### 10.1 `backend/app.py` — Flask Application (~2,800 lines)
+### 10.1 `backend/oems.py` — Flask Application (~3,000 lines)
 
 The orchestration core. Responsibilities:
 

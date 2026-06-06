@@ -113,6 +113,27 @@ def ensure_student_face_schema():
                 cursor.execute("ALTER TABLE students ADD COLUMN face_registered_at DATETIME NULL")
                 print("[FaceAuth] Added students.face_registered_at column")
 
+            # Tracks the one-time "face registration successful" confirmation
+            # email. `face_reg_email_status` is a small state machine that doubles
+            # as the duplicate-send guard:
+            #   0 = not sent, 1 = send in progress (claimed), 2 = sent OK, 3 = gave up after retries
+            # The atomic 0 -> 1 transition (see _claim_face_reg_email) guarantees
+            # exactly one sender even under page refresh / API retry / double submit.
+            cursor.execute("SHOW COLUMNS FROM students LIKE 'face_reg_email_status'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE students ADD COLUMN face_reg_email_status TINYINT(1) NOT NULL DEFAULT 0")
+                print("[FaceAuth] Added students.face_reg_email_status column")
+
+            cursor.execute("SHOW COLUMNS FROM students LIKE 'face_reg_email_attempts'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE students ADD COLUMN face_reg_email_attempts INT NOT NULL DEFAULT 0")
+                print("[FaceAuth] Added students.face_reg_email_attempts column")
+
+            cursor.execute("SHOW COLUMNS FROM students LIKE 'face_reg_email_sent_at'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE students ADD COLUMN face_reg_email_sent_at DATETIME NULL")
+                print("[FaceAuth] Added students.face_reg_email_sent_at column")
+
             # Anyone whose face was registered only under the old engine must
             # re-enrol with ArcFace: clear their stale "registered" flag if they
             # have no v2 embedding yet.
@@ -955,12 +976,47 @@ def student_face_frame():
             (face_engine.serialize(probe), student_id)
         )
         conn.commit()
+
+        # Re-read to confirm the biometric profile is actually persisted before
+        # we tell the student (and email them) that registration succeeded. Only
+        # a verified, committed enrolment triggers the one-time confirmation mail.
+        cursor.execute(
+            "SELECT face_registered, face_embedding_v2 FROM students WHERE id=%s",
+            (student_id,)
+        )
+        verify_row = cursor.fetchone()
         cursor.close(); conn.close()
+        registration_confirmed = bool(
+            verify_row
+            and verify_row.get("face_registered")
+            and verify_row.get("face_embedding_v2") is not None
+        )
+
         session.pop("pending_student_auth", None)
         _clear_face_session(student_id)
         # New enrolment → drop any cached embedding so proctoring identity
         # checks pick up the fresh face immediately.
         _enrolled_emb_cache.pop(student_id, None)
+
+        if registration_confirmed:
+            # One-time, duplicate-safe confirmation email. Sent in the background
+            # with retries; the atomic DB claim inside guarantees it goes out
+            # exactly once even across refreshes / retries / multiple workers, and
+            # never fires on subsequent login verifications (mode == "verify").
+            # No biometric data is included — only name / admission no / timestamp.
+            dispatch_face_registration_email(
+                student_id,
+                student.get("email"),
+                student.get("name"),
+                student.get("admission_no"),
+                registered_at=datetime.now(),
+            )
+        else:
+            logger.error(
+                f"[FaceRegEmail] enrolment not confirmed in DB for student {student_id}; "
+                f"confirmation email NOT sent"
+            )
+
         return jsonify({
             "ok": True, "state": "registered", "done": True, "relogin": True,
             "message": "Face registered successfully. Please log in again to continue.",
@@ -2327,11 +2383,16 @@ logger = logging.getLogger(__name__)
 EMAIL_CONFIG = {
     'SENDER_EMAIL':       os.environ.get('OEMS_EMAIL'),
     'APP_PASSWORD':       os.environ.get('OEMS_EMAIL_PASSWORD'),
-    'SMTP_SERVER':        'smtp.gmail.com',
-    'SMTP_PORT':          587,
+    'SMTP_SERVER':        os.environ.get('OEMS_SMTP_SERVER', 'smtp.gmail.com'),
+    'SMTP_PORT':          int(os.environ.get('OEMS_SMTP_PORT', '587')),
+    'SUPPORT_EMAIL':      os.environ.get('OEMS_SUPPORT_EMAIL', os.environ.get('OEMS_EMAIL')),
     'OTP_EXPIRY_MINUTES': 10,
     'MAX_OTP_ATTEMPTS':   3,
-    'RATE_LIMIT_MINUTES': 5
+    'RATE_LIMIT_MINUTES': 5,
+    # Delivery retry policy (used by send_with_retry). Tunable via env so ops can
+    # back off harder on a flaky SMTP relay without a code change.
+    'EMAIL_MAX_RETRIES':  int(os.environ.get('OEMS_EMAIL_MAX_RETRIES', '3')),
+    'EMAIL_RETRY_BACKOFF': float(os.environ.get('OEMS_EMAIL_RETRY_BACKOFF', '5')),
 }
 if not EMAIL_CONFIG['SENDER_EMAIL'] or not EMAIL_CONFIG['APP_PASSWORD']:
     raise RuntimeError("OEMS_EMAIL aur OEMS_EMAIL_PASSWORD .env mein set nahi hain!")
@@ -2546,6 +2607,95 @@ class EmailService:
         except Exception as e:
             logger.error(f"Success email failed: {e}"); return False
 
+    def send_face_registration_email(self, receiver_email, student_name, admission_no, registered_at=None):
+        """One-time confirmation that the student's face profile was enrolled.
+
+        Sent ONLY on first-time face registration (never on subsequent login
+        verifications). Carries no biometric data — just the human-readable
+        outcome (name, admission no, timestamp, status). Returns True on a
+        confirmed SMTP handoff, False otherwise so the caller can retry."""
+        try:
+            if not receiver_email or not is_valid_email(receiver_email):
+                logger.warning(f"Face-registration email skipped — invalid address: {receiver_email!r}")
+                return False
+
+            first_name  = get_first_name(student_name)
+            reg_dt      = registered_at or datetime.now()
+            reg_display = reg_dt.strftime("%d %b %Y, %I:%M %p")
+            ref_id      = reg_dt.strftime("%Y-%m-%d %H:%M:%S")
+            support     = EMAIL_CONFIG.get('SUPPORT_EMAIL') or self.sender_email
+
+            msg = MIMEMultipart('alternative')
+            msg['From']    = formataddr(('OEMS Security Team', self.sender_email))
+            msg['To']      = receiver_email
+            msg['Subject'] = "OEMS — Face Registration Successful"
+
+            text = (
+                f"Hi {first_name},\n\n"
+                f"Your face profile has been registered successfully on OEMS — "
+                f"Online Examination & Monitoring System.\n\n"
+                f"Name: {student_name}\n"
+                f"Admission No: {admission_no}\n"
+                f"Registration Date & Time: {reg_display}\n"
+                f"Status: Successful\n\n"
+                f"You can now use face verification to securely access your exams. "
+                f"No biometric data is ever shared in this email.\n\n"
+                f"If you did NOT perform this registration, contact support immediately at {support}.\n\n"
+                f"Regards,\nOEMS Security Team\nRef ID: {ref_id}"
+            )
+
+            # Responsive, table-based HTML (renders across major mail clients).
+            html = f"""\
+<html><body style="font-family:Arial,Helvetica,sans-serif;background:#f4f5f7;padding:20px;margin:0;">
+<table align="center" width="100%" style="max-width:520px;background:#fff;border-radius:8px;border:1px solid #e0e0e0;margin:0 auto;border-collapse:collapse;">
+  <tr><td style="background:#e8f5e9;padding:18px 20px;text-align:center;border-radius:8px 8px 0 0;border-bottom:1px solid #c8e6c9;">
+    <p style="margin:0;font-size:12px;color:#666;text-transform:uppercase;letter-spacing:1px;">OEMS — Online Examination &amp; Monitoring System</p>
+    <h2 style="margin:6px 0 0;color:#1e293b;font-size:21px;font-weight:700;">Face Registration Successful</h2>
+  </td></tr>
+  <tr><td style="padding:28px 24px;">
+    <table width="100%" style="margin-bottom:18px;"><tr>
+      <td align="center" style="padding:6px 0;">
+        <span style="display:inline-block;width:56px;height:56px;line-height:56px;border-radius:50%;background:#e8f5e9;color:#2e7d32;font-size:30px;font-weight:700;">&#10003;</span>
+      </td></tr></table>
+    <p style="margin:0 0 16px;color:#333;font-size:15px;">Hi <strong>{escape(first_name)}</strong>,</p>
+    <p style="margin:0 0 18px;color:#555;font-size:14px;line-height:1.6;">Your face profile has been <strong>registered successfully</strong>. You can now use secure face verification to access your examinations.</p>
+    <table width="100%" style="background:#f8fafc;border-radius:6px;border:1px solid #e0e0e0;margin-bottom:18px;border-collapse:collapse;">
+      <tr><td style="padding:10px 14px;color:#333;font-size:14px;font-weight:600;border-bottom:1px solid #eee;width:48%;">Name</td>
+          <td style="padding:10px 14px;color:#555;font-size:14px;border-bottom:1px solid #eee;">{escape(str(student_name))}</td></tr>
+      <tr><td style="padding:10px 14px;color:#333;font-size:14px;font-weight:600;border-bottom:1px solid #eee;">Admission No</td>
+          <td style="padding:10px 14px;font-size:14px;border-bottom:1px solid #eee;"><span style="font-family:monospace;font-weight:700;color:#1e293b;">{escape(str(admission_no))}</span></td></tr>
+      <tr><td style="padding:10px 14px;color:#333;font-size:14px;font-weight:600;border-bottom:1px solid #eee;">Registration Date &amp; Time</td>
+          <td style="padding:10px 14px;color:#555;font-size:14px;border-bottom:1px solid #eee;">{escape(reg_display)}</td></tr>
+      <tr><td style="padding:10px 14px;color:#333;font-size:14px;font-weight:600;">Status</td>
+          <td style="padding:10px 14px;font-size:14px;"><span style="display:inline-block;background:#e8f5e9;color:#2e7d32;font-weight:700;font-size:13px;padding:3px 10px;border-radius:12px;">Successful</span></td></tr>
+    </table>
+    <table width="100%" style="margin-bottom:20px;"><tr>
+      <td style="background:#e3f2fd;border-left:4px solid #1976d2;border-radius:0 4px 4px 0;padding:12px 14px;">
+        <p style="margin:0;color:#0d47a1;font-size:13px;line-height:1.5;">&#128274; For your privacy, no biometric data is ever included in this email.</p>
+      </td></tr></table>
+    <table width="100%" style="margin-bottom:20px;"><tr>
+      <td style="background:#fff3e0;border-left:4px solid #ff9800;border-radius:0 4px 4px 0;padding:12px 14px;">
+        <p style="margin:0;color:#e65100;font-size:13px;line-height:1.5;">&#9888;&#65039; If you did <strong>not</strong> perform this registration, please contact support immediately.</p>
+      </td></tr></table>
+    <p style="margin:0 0 4px;color:#333;font-size:14px;"><strong>Regards,</strong></p>
+    <p style="margin:0;color:#555;font-size:14px;">OEMS Security Team</p>
+  </td></tr>
+  <tr><td style="padding:14px 24px;border-top:1px solid #f0f0f0;text-align:center;">
+    <p style="margin:0 0 4px;font-size:12px;color:#777;">Need help? Contact us at <a href="mailto:{escape(support)}" style="color:#4f46e5;text-decoration:none;">{escape(support)}</a></p>
+    <p style="margin:0;font-size:11px;color:#aaa;">OEMS — Online Examination &amp; Monitoring System &nbsp;&middot;&nbsp; Ref ID: {ref_id}</p>
+  </td></tr>
+</table></body></html>"""
+
+            msg.attach(MIMEText(text, 'plain'))
+            msg.attach(MIMEText(html, 'html'))
+            with self._create_connection() as server:
+                server.sendmail(self.sender_email, receiver_email, msg.as_string())
+            logger.info(f"Face-registration email sent to {receiver_email}")
+            return True
+        except Exception as e:
+            logger.error(f"Face-registration email failed: {e}")
+            return False
+
     def create_exam_alert_msg(self, receiver_email, student_name, exam_name, exam_date, duration):
         first_name = get_first_name(student_name)
         ref_id     = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2613,6 +2763,126 @@ def send_email_async(func, *args, **kwargs):
         except Exception as e: logger.error(f"Async email failed: {e}")
     t = threading.Thread(target=task); t.daemon = True; t.start()
     return t
+
+
+def send_with_retry(func, *args, max_retries=None, backoff=None, label="email", **kwargs):
+    """Call an EmailService send-method, retrying on failure with linear backoff.
+
+    The send-methods return True/False (they swallow their own exceptions), so a
+    falsy result counts as a failed attempt. Returns (ok, attempts) so callers can
+    persist delivery status."""
+    if max_retries is None:
+        max_retries = EMAIL_CONFIG['EMAIL_MAX_RETRIES']
+    if backoff is None:
+        backoff = EMAIL_CONFIG['EMAIL_RETRY_BACKOFF']
+    attempts = 0
+    for i in range(1, max_retries + 1):
+        attempts = i
+        try:
+            if func(*args, **kwargs):
+                if i > 1:
+                    logger.info(f"{label} delivered on attempt {i}/{max_retries}")
+                return True, attempts
+            logger.warning(f"{label} attempt {i}/{max_retries} failed (no exception)")
+        except Exception as e:
+            logger.warning(f"{label} attempt {i}/{max_retries} raised: {e}")
+        if i < max_retries:
+            time.sleep(backoff * i)
+    logger.error(f"{label} gave up after {attempts} attempt(s)")
+    return False, attempts
+
+
+# ── FACE-REGISTRATION CONFIRMATION EMAIL (one-time, duplicate-safe) ─────────────
+# Email status codes stored in students.face_reg_email_status:
+FACE_REG_EMAIL_UNSENT      = 0
+FACE_REG_EMAIL_IN_PROGRESS = 1
+FACE_REG_EMAIL_SENT        = 2
+FACE_REG_EMAIL_FAILED      = 3
+
+
+def _claim_face_reg_email(student_id):
+    """Atomically claim the right to send THIS student's face-registration email.
+
+    The single UPDATE flips status 0 -> 1 only if it is currently 0 (or a stale
+    3 = previously-failed, so a retry can occur). Because the WHERE clause and the
+    SET are one statement, only one concurrent request (page refresh, API retry,
+    double submit, even across workers) sees rowcount==1 and wins the claim. All
+    others get 0 and quietly back off. Returns True if this caller won the claim."""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE students "
+            "SET face_reg_email_status=%s, face_reg_email_attempts=face_reg_email_attempts+1 "
+            "WHERE id=%s AND face_reg_email_status IN (%s, %s)",
+            (FACE_REG_EMAIL_IN_PROGRESS, student_id,
+             FACE_REG_EMAIL_UNSENT, FACE_REG_EMAIL_FAILED),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+    except Exception as e:
+        logger.error(f"[FaceRegEmail] claim failed for student {student_id}: {e}")
+        return False
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+def _mark_face_reg_email(student_id, status):
+    """Persist the terminal status (SENT / FAILED) after a claimed send finishes."""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if status == FACE_REG_EMAIL_SENT:
+            cursor.execute(
+                "UPDATE students SET face_reg_email_status=%s, face_reg_email_sent_at=NOW() WHERE id=%s",
+                (status, student_id),
+            )
+        else:
+            cursor.execute(
+                "UPDATE students SET face_reg_email_status=%s WHERE id=%s",
+                (status, student_id),
+            )
+        conn.commit()
+    except Exception as e:
+        logger.error(f"[FaceRegEmail] status update ({status}) failed for student {student_id}: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+def dispatch_face_registration_email(student_id, email, name, admission_no, registered_at=None):
+    """Fire the one-time face-registration email in the background.
+
+    Guarded by an atomic DB claim so it is sent exactly once per student even if
+    this is called multiple times (refresh / retry / concurrent workers). On a
+    delivery failure after all retries the status is reset to FAILED so a future
+    genuine attempt can re-claim and try again — but a successful send is final."""
+    if not email or not is_valid_email(email):
+        logger.warning(f"[FaceRegEmail] no valid email for student {student_id}; skipping")
+        return
+
+    if not _claim_face_reg_email(student_id):
+        # Another request already sent it or is sending it right now.
+        logger.info(f"[FaceRegEmail] student {student_id} already claimed/sent; skipping duplicate")
+        return
+
+    def task():
+        ok, _attempts = send_with_retry(
+            email_service.send_face_registration_email,
+            email, name, admission_no, registered_at,
+            label=f"face-registration email (student {student_id})",
+        )
+        _mark_face_reg_email(
+            student_id,
+            FACE_REG_EMAIL_SENT if ok else FACE_REG_EMAIL_FAILED,
+        )
+
+    threading.Thread(target=task, daemon=True).start()
 
 
 # ── SEND OTP

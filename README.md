@@ -72,6 +72,7 @@ OEMS has **two roles**, each with its own login and access scope (enforced by a 
 - **ArcFace 512-d** identity embeddings via InsightFace (`buffalo_l`).
 - **Active liveness** challenge (blink / head-turn) to defeat photo spoofing.
 - **Duplicate-face detection** prevents one face being registered to two accounts.
+- **One-time face-registration confirmation email** — branded, responsive HTML sent automatically after first-time enrolment is verified in the DB; duplicate-safe (atomic claim + retries) and biometric-free.
 - Server-authoritative capture (the browser cannot fake frames or decisions).
 
 ### AI Proctoring
@@ -130,7 +131,7 @@ OEMS has **two roles**, each with its own login and access scope (enforced by a 
                └────────────────────┬────────────────────┘
                                     ▼
                         ┌──────────────────────┐
-                        │   Flask App (app.py)  │
+                        │  Flask App (oems.py)  │
                         │  ─ Auth & sessions    │
                         │  ─ Exam delivery      │
                         │  ─ Proctoring API     │
@@ -156,8 +157,9 @@ OEMS has **two roles**, each with its own login and access scope (enforced by a 
 
 **Key modules**
 
-- **`backend/app.py`** — the Flask application: routes, authentication, exam flow, proctoring endpoints, the post-exam grading pipeline, email/OTP, and PDF generation.
+- **`backend/oems.py`** — the Flask application: routes, authentication, face-verification flow, exam flow, proctoring endpoints, the post-exam grading pipeline, email/OTP/face-registration notifications, and PDF generation.
 - **`backend/face_engine.py`** — a self-contained, thread-safe ArcFace engine (detection, recognition, liveness signals, embedding (de)serialization). Pure functions over NumPy arrays; no Flask/DB coupling.
+- **`backend/proctor_engine.py`** — the AI proctoring detectors (RetinaFace face counting, head-pose/gaze, identity continuity, YOLOv8 object detection) returning per-frame confidences; the temporal escalation layer lives in `oems.py`.
 - **`secure-browser/`** — the Electron kiosk browser (`main.js`, `preload.js`, `splash.html`).
 
 ---
@@ -167,8 +169,9 @@ OEMS has **two roles**, each with its own login and access scope (enforced by a 
 ```
 exam-system/
 ├── backend/
-│   ├── app.py                  # Main Flask application (~2,800 lines)
+│   ├── oems.py                 # Main Flask application (~3,000 lines)
 │   ├── face_engine.py          # ArcFace recognition + liveness engine
+│   ├── proctor_engine.py       # AI proctoring detectors (face count, gaze, YOLOv8)
 │   ├── requirements.txt        # Pinned Python dependencies
 │   ├── .env.example            # Environment template (copy to .env)
 │   └── templates/              # Jinja2 templates
@@ -197,9 +200,13 @@ exam-system/
 │   ├── preload.js              # Secure IPC bridge
 │   ├── splash.html             # Launch screen
 │   └── package.json
+├── SETUP_Files/
+│   ├── WINDOWS_SETUP.md        # Full Windows setup guide
+│   └── MacBook_SETUP.md        # Full macOS setup guide
+├── docs/
+│   ├── PROJECT_REPORT.md       # Detailed project report
+│   └── VIVA_READY_QA.md        # Viva preparation Q&A
 ├── oems_nginx.conf             # Nginx reverse-proxy config (gitignored)
-├── WINDOWS_SETUP.md            # Full Windows setup guide
-├── MacBook_SETUP.md            # Full macOS setup guide
 ├── .gitignore
 └── README.md
 ```
@@ -259,7 +266,7 @@ Create the MySQL database and schema (see [Database Setup](#database-setup)).
 ### 5. Run the backend
 
 ```bash
-python app.py
+python oems.py
 ```
 
 The server starts on **http://127.0.0.1:5000**.
@@ -298,7 +305,18 @@ Copy `backend/.env.example` to `backend/.env` and fill in real values. **Never c
 | `CAMPUS_IP_RANGES` | `10.104.242` | Comma-separated IP prefixes allowed for `secure_campus` exams. |
 | `SBERT_MODEL` | `all-MiniLM-L6-v2` | Sentence-BERT model for theory grading. |
 | `PLAGIARISM_THRESHOLD` | `70` | % similarity at/above which a result is placed on Hold. |
+| `OEMS_EVIDENCE_DIR` | `backend/static/evidence` | Where proctoring evidence snapshots are written. |
 | `GRPC_DNS_RESOLVER` | `native` | gRPC resolver hint (avoids DNS warnings). |
+
+### Email service (optional)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OEMS_SMTP_SERVER` | `smtp.gmail.com` | SMTP relay host. |
+| `OEMS_SMTP_PORT` | `587` | SMTP relay port (STARTTLS). |
+| `OEMS_SUPPORT_EMAIL` | = `OEMS_EMAIL` | Support address shown in transactional email footers. |
+| `OEMS_EMAIL_MAX_RETRIES` | `3` | Send attempts before giving up (face-registration confirmation, etc.). |
+| `OEMS_EMAIL_RETRY_BACKOFF` | `5` | Base seconds between retries (linear backoff: 5s, 10s, …). |
 
 ### Face-recognition tuning (optional)
 
@@ -421,7 +439,14 @@ CREATE TABLE exam_violations (
 );
 ```
 
-The three face columns — `face_embedding_v2` (`MEDIUMBLOB`), `face_registered` (`TINYINT`), and `face_registered_at` (`DATETIME`) — are added to `students` **automatically** by `ensure_student_face_schema()` on the first student login. You do not need to add them manually.
+The face-recognition columns are added to `students` **automatically** by `ensure_student_face_schema()` on the first student login — you do not need to add them manually:
+
+- `face_embedding_v2` (`MEDIUMBLOB`) — the ArcFace identity vector (raw float32 bytes).
+- `face_registered` (`TINYINT`) — `1` once enrolled.
+- `face_registered_at` (`DATETIME`) — enrolment timestamp.
+- `face_reg_email_status` (`TINYINT`) — confirmation-email state machine / duplicate-send guard: `0` unsent · `1` sending (claimed) · `2` sent · `3` failed.
+- `face_reg_email_attempts` (`INT`) — number of send claims made.
+- `face_reg_email_sent_at` (`DATETIME`) — when the confirmation email was delivered.
 
 > The first admin account must be inserted manually (with a Werkzeug-hashed password). See the setup guides' "Creating the First Admin Account" section for the exact snippet.
 
@@ -439,6 +464,7 @@ OEMS uses **ArcFace 512-d embeddings** (InsightFace `buffalo_l`) for biometric i
 4. Once `FACE_REGISTER_FRAMES` clean frames pass, their embeddings are averaged and re-normalized into a stable identity vector.
 5. A **duplicate-face check** scans all other accounts; if the new face matches an existing student above `FACE_DUPLICATE_THRESHOLD`, registration is **rejected** (anti account-sharing).
 6. The averaged embedding is stored as raw float32 bytes in `students.face_embedding_v2`, and the student is asked to log in again.
+7. **Registration confirmation email** — once the embedding is committed and re-read from the database (enrolment verified), OEMS sends a **one-time** branded confirmation email to the student (name, admission no, date/time, status: Successful). It is dispatched in the background with retries on SMTP failure, and an **atomic DB claim** (`students.face_reg_email_status`) guarantees it is sent **exactly once** — never on page refresh, API retry, multiple submissions, or subsequent login verifications. **No biometric data is ever included in the email.**
 
 ### Verification (every subsequent login)
 
@@ -470,11 +496,13 @@ OEMS uses **ArcFace 512-d embeddings** (InsightFace `buffalo_l`) for biometric i
                     not registered → enroll          registered → verify
                               │                               │
                               ▼                               ▼
-                     "log in again"                  match ≥ threshold?
-                                                              │
-                                                        ┌─────┴─────┐
-                                                        ▼           ▼
-                                                  /student      retry
+                  store + verify in DB                match ≥ threshold?
+                              │                               │
+                              ▼                         ┌─────┴─────┐
+              one-time confirmation email               ▼           ▼
+                              │                       /student     retry
+                              ▼
+                     "log in again"
 ```
 
 - Password is checked with `check_password_hash` (Werkzeug PBKDF2).
@@ -529,7 +557,7 @@ The kiosk browser launches fullscreen, signs requests with `X-OEMS-Secure-Browse
 
 ## Deployment
 
-The Flask app listens on **`127.0.0.1:5000`** by default (`app.run(...)` in [`backend/app.py`](backend/app.py)). For anything beyond local testing, run it behind a production WSGI server and an Nginx reverse proxy.
+The Flask app listens on **`127.0.0.1:5000`** by default (`app.run(...)` in [`backend/oems.py`](backend/oems.py)). For anything beyond local testing, run it behind a production WSGI server and an Nginx reverse proxy.
 
 ### Backend (production)
 
@@ -537,11 +565,11 @@ The Flask app listens on **`127.0.0.1:5000`** by default (`app.run(...)` in [`ba
    ```bash
    # macOS / Linux
    pip install gunicorn
-   gunicorn --workers 3 --bind 127.0.0.1:5000 --timeout 120 app:app
+   gunicorn --workers 3 --bind 127.0.0.1:5000 --timeout 120 oems:app
 
    # Windows
    pip install waitress
-   waitress-serve --listen=127.0.0.1:5000 app:app
+   waitress-serve --listen=127.0.0.1:5000 oems:app
    ```
    > Note: ML models (ArcFace / YOLO / SBERT) load lazily per process and consume significant memory — size the worker count to your RAM.
 

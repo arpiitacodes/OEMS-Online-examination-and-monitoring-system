@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Identity Verification</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;800&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-1: #0b1733;
@@ -251,6 +252,209 @@
             .card { grid-template-columns: 1fr; }
             .info { order: 2; }
         }
+
+        /* ── Full-screen "Registration Successful" completion screen ──
+           Matched to the rest of OEMS: light glassy theme, Poppins type,
+           indigo/blue accents (#4f46e5 / #3b82f6) with a green success tone. */
+        .success-screen {
+            position: fixed; inset: 0;
+            z-index: 50;
+            font-family: 'Poppins', 'Inter', system-ui, sans-serif;
+            display: grid; place-items: center;
+            padding: clamp(20px, 4vw, 56px);
+            background-color: #f1f5f9;
+            opacity: 0; visibility: hidden;
+            transition: opacity .5s ease, visibility .5s ease;
+            overflow: hidden;
+        }
+        .success-screen.show { opacity: 1; visibility: visible; }
+        /* Animated blurred blobs — same motif as home / dashboard pages */
+        .success-screen::before,
+        .success-screen::after {
+            content: ""; position: absolute; border-radius: 50%;
+            filter: blur(80px); opacity: .55; pointer-events: none;
+        }
+        .success-screen::before { width: 440px; height: 440px; top: -120px; left: -110px;
+            background: rgba(34, 197, 94, 0.16); }
+        .success-screen::after  { width: 520px; height: 520px; bottom: -160px; right: -120px;
+            background: rgba(79, 70, 229, 0.16); }
+        .success-screen.show::before { animation: floaty 10s ease-in-out infinite alternate; }
+        .success-screen.show::after  { animation: floaty 10s ease-in-out infinite alternate-reverse; }
+        @keyframes floaty { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(30px, 40px) scale(1.08); } }
+
+        .success-card {
+            position: relative;
+            width: min(560px, 100%);
+            text-align: center;
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(79, 70, 229, 0.18);
+            border-radius: 20px;
+            padding: clamp(34px, 4.2vw, 58px) clamp(26px, 4vw, 60px) clamp(30px, 3.4vw, 44px);
+            box-shadow: 0 20px 60px rgba(31, 38, 135, 0.12);
+            backdrop-filter: blur(20px);
+            transform: translateY(18px) scale(.97);
+            opacity: 0;
+        }
+        .success-screen.show .success-card {
+            animation: cardIn .6s cubic-bezier(.2,.8,.25,1) .12s forwards;
+        }
+        @keyframes cardIn { to { transform: translateY(0) scale(1); opacity: 1; } }
+
+        /* Top accent line — echoes the glowing split-line used on dashboards */
+        .success-card::before {
+            content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            width: 64%; height: 3px; border-radius: 0 0 6px 6px;
+            background: linear-gradient(90deg, transparent, #4f46e5, #3b82f6, transparent);
+        }
+
+        .success-brand {
+            display: inline-flex; align-items: center; gap: 10px;
+            justify-content: center; color: var(--ink-dark);
+            margin-bottom: clamp(24px, 3vw, 38px);
+            font-weight: 700; font-size: clamp(16px, 1.4vw, 19px); letter-spacing: .3px;
+        }
+        .success-brand .brand-logo {
+            width: clamp(34px, 3vw, 42px); height: clamp(34px, 3vw, 42px);
+            border-radius: 11px; flex-shrink: 0;
+            background: linear-gradient(135deg, #4f46e5, #3b82f6);
+            display: grid; place-items: center;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+        }
+        .success-brand .brand-logo svg { width: 56%; height: 56%; }
+
+        .success-badge {
+            position: relative;
+            width: clamp(112px, 12vw, 150px); height: clamp(112px, 12vw, 150px);
+            margin: 0 auto clamp(22px, 2.6vw, 32px);
+            border-radius: 50%;
+            display: grid; place-items: center;
+            background: radial-gradient(circle at 50% 42%, rgba(34,197,94,.18), rgba(34,197,94,.04) 70%);
+        }
+        .success-badge::after {
+            content: ""; position: absolute; inset: 0;
+            border-radius: 50%;
+            border: 2px solid rgba(34, 197, 94, .40);
+            transform: scale(.5); opacity: 0;
+        }
+        .success-screen.show .success-badge::after {
+            animation: haloPulse 1.7s ease-out .5s infinite;
+        }
+        @keyframes haloPulse {
+            0%   { transform: scale(.65); opacity: .8; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        .success-check { width: 76%; height: 76%; }
+        .success-check__circle {
+            stroke: #22c55e; stroke-width: 3;
+            stroke-dasharray: 151; stroke-dashoffset: 151;
+        }
+        .success-check__path {
+            stroke: #22c55e; stroke-width: 4;
+            stroke-linecap: round; stroke-linejoin: round;
+            stroke-dasharray: 48; stroke-dashoffset: 48;
+        }
+        .success-screen.show .success-check__circle {
+            animation: drawCircle .6s ease-out .3s forwards;
+        }
+        .success-screen.show .success-check__path {
+            animation: drawCheck .35s ease-out .85s forwards;
+        }
+        @keyframes drawCircle { to { stroke-dashoffset: 0; } }
+        @keyframes drawCheck  { to { stroke-dashoffset: 0; } }
+
+        /* Confetti burst on completion */
+        .confetti {
+            position: absolute; top: 50%; left: 50%;
+            width: 10px; height: 10px; border-radius: 2px;
+            opacity: 0;
+        }
+        .success-screen.show .confetti { animation: burst 1s ease-out 1s forwards; }
+        .confetti:nth-child(1) { background: #22c55e; --tx: -96px; --ty: -82px; --r: -140deg; }
+        .confetti:nth-child(2) { background: #4f46e5; --tx:  92px; --ty: -74px; --r:  120deg; }
+        .confetti:nth-child(3) { background: #f59e0b; --tx:-108px; --ty:  42px; --r:  90deg;  }
+        .confetti:nth-child(4) { background: #3b82f6; --tx: 104px; --ty:  52px; --r: -110deg; }
+        .confetti:nth-child(5) { background: #ec4899; --tx: -28px; --ty:-114px; --r:  60deg;  }
+        .confetti:nth-child(6) { background: #14b8a6; --tx:  32px; --ty: 108px; --r: -70deg;  }
+        @keyframes burst {
+            0%   { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(0); }
+            20%  { opacity: 1; }
+            100% { opacity: 0;
+                   transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(1) rotate(var(--r)); }
+        }
+
+        .success-card h1 {
+            margin: 0 0 clamp(8px, 1vw, 12px); color: var(--ink-dark);
+            font-size: clamp(25px, 3.2vw, 38px); letter-spacing: -.5px; font-weight: 800;
+            line-height: 1.15;
+        }
+        .success-sub {
+            margin: 0 auto clamp(20px, 2.2vw, 28px); color: #64748b;
+            font-size: clamp(14px, 1.4vw, 17px); line-height: 1.5; max-width: 38ch;
+        }
+        .success-meta {
+            display: inline-flex; align-items: center; gap: 10px;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 99px; padding: clamp(8px, .9vw, 11px) clamp(16px, 1.8vw, 22px);
+            color: #4338ca; font-size: clamp(13px, 1.2vw, 16px); font-weight: 600;
+            margin-bottom: clamp(26px, 3vw, 38px);
+        }
+        .success-name { color: #312e81; }
+        .success-dot { color: #a5b4fc; }
+
+        .success-redirect {
+            display: flex; align-items: center; justify-content: center; gap: 9px;
+            margin: 0 0 clamp(12px, 1.4vw, 16px); color: #64748b;
+            font-size: clamp(13px, 1.2vw, 15px); font-weight: 500;
+        }
+        .dots { display: inline-flex; gap: 4px; }
+        .dots i {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #4f46e5; opacity: .3;
+            animation: dotPulse 1.2s ease-in-out infinite;
+        }
+        .dots i:nth-child(2) { animation-delay: .2s; }
+        .dots i:nth-child(3) { animation-delay: .4s; }
+        @keyframes dotPulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+
+        .success-bar {
+            height: 5px; border-radius: 99px;
+            background: #e2e8f0; overflow: hidden;
+            max-width: 320px; margin: 0 auto;
+        }
+        .success-bar > i {
+            display: block; height: 100%; width: 100%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, #4f46e5, #3b82f6);
+            transform: translateX(-100%);
+        }
+        .success-screen.show .success-bar > i {
+            animation: countdown 3s linear .2s forwards;
+        }
+        @keyframes countdown { to { transform: translateX(0); } }
+
+        /* Wide desktop / large monitors — give the card more presence */
+        @media (min-width: 1280px) {
+            .success-card { width: min(620px, 100%); }
+        }
+        /* Short landscape laptops — keep everything inside the viewport */
+        @media (max-height: 640px) {
+            .success-brand { margin-bottom: 16px; }
+            .success-badge { margin-bottom: 16px; }
+            .success-meta  { margin-bottom: 18px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .success-screen, .success-card, .success-check__circle, .success-check__path,
+            .success-badge::after, .confetti, .dots i, .success-bar > i,
+            .success-screen::before, .success-screen::after {
+                animation: none !important;
+                transition-duration: .01ms !important;
+            }
+            .success-card { transform: none; opacity: 1; }
+            .success-check__circle, .success-check__path { stroke-dashoffset: 0; }
+        }
     </style>
 </head>
 <body>
@@ -258,7 +462,13 @@
         <!-- Camera stage -->
         <section class="stage">
             <div class="brand">
-                <span class="logo">🛡️</span>
+                <span class="logo">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#fff"
+                         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" />
+                        <path d="M9 12l2 2 4-4" />
+                    </svg>
+                </span>
                 <div>OEMS Secure Login
                     <small>Facial identity checkpoint</small>
                 </div>
@@ -316,6 +526,47 @@
         </aside>
     </div>
 
+    <!-- Full-screen "Registration Successful" completion screen -->
+    <div class="success-screen" id="successScreen" role="alertdialog" aria-modal="true" aria-labelledby="successTitle">
+        <div class="success-card">
+            <div class="success-brand">
+                <span class="brand-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" />
+                        <path d="M9 12l2 2 4-4" />
+                    </svg>
+                </span>
+                <span>OEMS</span>
+            </div>
+
+            <div class="success-badge" id="successBadge">
+                <span class="confetti"></span><span class="confetti"></span>
+                <span class="confetti"></span><span class="confetti"></span>
+                <span class="confetti"></span><span class="confetti"></span>
+                <svg class="success-check" viewBox="0 0 52 52" aria-hidden="true">
+                    <circle class="success-check__circle" cx="26" cy="26" r="24" fill="none" />
+                    <path class="success-check__path" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+                </svg>
+            </div>
+
+            <h1 id="successTitle">Registration Successful</h1>
+            <p class="success-sub" id="successSub">Your Face ID has been set up securely.</p>
+
+            <div class="success-meta">
+                <span class="success-name">{{ student_name }}</span>
+                <span class="success-dot">&middot;</span>
+                <span>{{ admission_no }}</span>
+            </div>
+
+            <p class="success-redirect">
+                <span class="dots"><i></i><i></i><i></i></span>
+                Redirecting to login…
+            </p>
+            <div class="success-bar"><i id="successBar"></i></div>
+        </div>
+    </div>
+
     <canvas id="canvas" style="display:none;"></canvas>
 
     <script>
@@ -367,6 +618,20 @@
             setOverlay(msg);
             setStatus(msg, false);
             setProgress(success ? 100 : 0);
+        }
+
+        // First-time enrolment complete → full-screen success, then auto-redirect
+        // to the login page after ~3s. No manual action required.
+        const REGISTER_SUCCESS_MS = 3000;
+        let redirectTimer = null;
+        function showRegistrationSuccess(msg, redirectTo) {
+            finished = true;
+            stopCamera();
+            if (msg) el("successSub").textContent = msg;
+            const screen = el("successScreen");
+            screen.classList.add("show");
+            if (redirectTimer) clearTimeout(redirectTimer);
+            redirectTimer = setTimeout(() => { location.href = redirectTo; }, REGISTER_SUCCESS_MS);
         }
 
         function captureFrame() {
@@ -425,8 +690,10 @@
 
                 // Terminal outcomes
                 if (data.done && data.relogin) {
-                    showResult(true, data.message || "Face registered. Please log in again.");
-                    setTimeout(() => location.href = "/", 1900); return;
+                    // First-time face registration complete → polished success
+                    // screen, then auto-redirect to the login page.
+                    showRegistrationSuccess("Your Face ID has been set up securely.", "/");
+                    return;
                 }
                 if (data.done && data.redirect) {
                     showResult(true, data.message || "Verified. Redirecting…");

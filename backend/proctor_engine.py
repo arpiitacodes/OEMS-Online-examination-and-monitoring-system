@@ -2,7 +2,7 @@
 proctor_engine.py — Accurate, confidence-scored AI proctoring for OEMS exams.
 
 This replaces the legacy Haar-cascade proctoring (frontal/alt2/profile cascades +
-eye cascade + face-box-centre "gaze") that lived inline in app.py. Haar is
+eye cascade + face-box-centre "gaze") that lived inline in oems.py. Haar is
 lighting-sensitive, drops faces on mild head turns, and double-counts profiles as
 "multiple people" — the root cause of the old system's flood of false violations.
 
@@ -26,7 +26,7 @@ What this engine does instead:
   * **Lighting / quality** gating so a dark or blurry frame produces a "can't
     assess" state instead of a false "no face" violation.
 
-Every detector returns a *confidence* in [0,1]. The temporal layer in app.py only
+Every detector returns a *confidence* in [0,1]. The temporal layer in oems.py only
 escalates to a logged violation when confidence stays high across several frames —
 this is what crushes the false-positive rate. This module is pure CV over numpy
 arrays: no Flask, DB, or session knowledge.
@@ -284,7 +284,7 @@ def analyze(bgr, enrolled_embedding=None, run_objects=True):
 
     The return value is intentionally rich and *neutral* — it reports what was
     seen with confidences, and leaves the escalate-to-violation decision to the
-    temporal layer in app.py. Keys:
+    temporal layer in oems.py. Keys:
 
       ok              -> bool (frame could be assessed at all)
       quality         -> dict from assess_quality

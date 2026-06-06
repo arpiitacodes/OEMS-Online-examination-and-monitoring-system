@@ -13,7 +13,7 @@ Design goals:
   * Active-liveness signals (blink via eye-aspect-ratio, head yaw via landmarks)
     are computed from the same detection pass, so no second model is needed.
 
-The proctoring pipeline in app.py keeps using its own Haar cascades; this module
+The proctoring pipeline in oems.py keeps using its own Haar cascades; this module
 is only used by the student face login/registration flow.
 """
 

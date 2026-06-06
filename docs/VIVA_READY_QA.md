@@ -6,7 +6,7 @@
 **Author:** Anshuman Kumar Singh
 **Repository:** https://github.com/anshumanks2004/OEMS-ExamSystem
 
-> Every answer below is grounded in the **actual OEMS codebase** (`app.py`, `face_engine.py`, `proctor_engine.py`, the Electron secure browser, and the MySQL schema). Use the cross-questions to anticipate follow-ups an examiner is likely to ask.
+> Every answer below is grounded in the **actual OEMS codebase** (`oems.py`, `face_engine.py`, `proctor_engine.py`, the Electron secure browser, and the MySQL schema). Use the cross-questions to anticipate follow-ups an examiner is likely to ask.
 
 ---
 
@@ -32,13 +32,13 @@ Password alone can't stop impersonation — someone else could log in for the st
 ## Section 2 — Architecture Questions
 
 **Q5. Describe the overall architecture.**
-A layered, server-authoritative web app: a thin **Flask** orchestrator (`app.py`) sits over self-contained CV/ML engines (`face_engine.py`, `proctor_engine.py`, SBERT, scikit-learn) and a normalized **MySQL** database accessed through a connection pool. The frontend is server-rendered Jinja2 + vanilla JS. A dedicated **Electron** kiosk browser is the secure client, and an optional **Nginx** reverse proxy serves static files and forwards the real client IP.
+A layered, server-authoritative web app: a thin **Flask** orchestrator (`oems.py`) sits over self-contained CV/ML engines (`face_engine.py`, `proctor_engine.py`, SBERT, scikit-learn) and a normalized **MySQL** database accessed through a connection pool. The frontend is server-rendered Jinja2 + vanilla JS. A dedicated **Electron** kiosk browser is the secure client, and an optional **Nginx** reverse proxy serves static files and forwards the real client IP.
 
 **Q6. What does "server-authoritative" mean here and why is it important?**
 The browser is untrusted; every integrity decision (face match, liveness, violation escalation, grading) is made on the server. For example, face-capture session state lives in a server-side dictionary keyed by student id, and escalated violations are persisted server-side in the same request — so a tampered client can't fake a pass or lower its violation count.
 
-**Q7. Why a modular separation between `app.py`, `face_engine.py`, and `proctor_engine.py`?**
-Separation of concerns and testability. `face_engine.py` and `proctor_engine.py` are **pure functions over NumPy arrays** with no Flask/DB knowledge, so they can be reused and tested in isolation. `app.py` owns HTTP, auth, sessions, and DB. Notably, the proctoring engine **reuses the same InsightFace model** loaded for login, so there's no extra model memory cost.
+**Q7. Why a modular separation between `oems.py`, `face_engine.py`, and `proctor_engine.py`?**
+Separation of concerns and testability. `face_engine.py` and `proctor_engine.py` are **pure functions over NumPy arrays** with no Flask/DB knowledge, so they can be reused and tested in isolation. `oems.py` owns HTTP, auth, sessions, and DB. Notably, the proctoring engine **reuses the same InsightFace model** loaded for login, so there's no extra model memory cost.
 
 **Q8. How do the two engines share a model?**
 `proctor_engine.py` imports `face_engine` and calls `face_engine.detect_faces()`, which uses the single lazily-loaded InsightFace singleton. One detector serves both login (best single face) and proctoring (all faces + keypoints + embeddings).

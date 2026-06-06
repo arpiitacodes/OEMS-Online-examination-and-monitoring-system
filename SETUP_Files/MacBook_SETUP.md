@@ -1,7 +1,7 @@
 # OEMS — Online Examination & Monitoring System
-## Complete Windows Setup & Installation Guide
+## Complete macOS (MacBook) Setup & Installation Guide
 
-> A step-by-step guide to set up and run the **OEMS Exam System** on a fresh Windows 10/11 machine — for both end users (administrators/proctors) and developers.
+> A step-by-step guide to set up and run the **OEMS Exam System** on a fresh macOS machine (Intel or Apple Silicon) — for both end users (administrators/proctors) and developers.
 
 ---
 
@@ -33,7 +33,9 @@
 
 ## 1. Project Overview
 
-**OEMS (Online Examination & Monitoring System)** is a secure, proctored online examination platform built for educational institutions. It allows administrators to create exams (MCQ/MSQ or theory), manage students, and monitor results, while students take exams through a locked-down secure browser with **biometric face verification** and **AI-based proctoring**.
+**OEMS (Online Examination & Monitoring System)** is a secure, proctored online examination platform built for educational institutions. Administrators create exams (MCQ/MSQ or theory), manage students, and review results; students take exams through a locked-down secure browser with **biometric face verification** and **AI-based proctoring**.
+
+> 💡 This project was originally developed and tested on **macOS**, so the Mac path is the most native one — including **CoreML acceleration** for face detection on Apple Silicon and a macOS Electron build target.
 
 ### Key Features
 
@@ -42,8 +44,8 @@
 - **Face authentication** — real ArcFace 512-d identity embeddings via InsightFace (`buffalo_l` model pack) with active liveness checks (blink / head-turn).
 - **AI proctoring** — camera-based face & gaze monitoring, multiple-face detection, and object detection (YOLOv8) during exams.
 - **Secure exam browser** — an Electron-based kiosk browser (SEB-like) that blocks copy/paste, navigation away, dev tools, and force-quit.
-- **AI answer evaluation** — descriptive answers scored with SBERT (Sentence-BERT) semantic similarity; built-in plagiarism detection.
-- **Email automation** — welcome emails with credentials and OTP verification via Gmail SMTP.
+- **AI answer evaluation** — descriptive answers scored with SBERT semantic similarity; built-in plagiarism detection.
+- **Email automation** — welcome emails with credentials, one-time face-registration confirmation, OTP verification, and exam/result notifications via Gmail SMTP.
 - **PDF result generation** — server-side result sheets via ReportLab.
 - **Browser/network gating** — exams can require the secure browser and/or a campus IP range.
 
@@ -56,7 +58,7 @@
 | **Backend** | Python 3.14, Flask 3.1, Werkzeug 3.1 |
 | **Database** | MySQL (via `mysql-connector-python` with connection pooling) |
 | **Secure Browser** | Electron 28 (Node.js), Axios |
-| **Face Recognition** | InsightFace (ArcFace `buffalo_l`), ONNX Runtime, OpenCV |
+| **Face Recognition** | InsightFace (ArcFace `buffalo_l`), ONNX Runtime (CoreML on Apple Silicon), OpenCV |
 | **AI Proctoring** | Ultralytics YOLOv8 (`yolov8n.pt`), OpenCV Haar cascades |
 | **AI Evaluation** | Sentence-Transformers (SBERT `all-MiniLM-L6-v2`), scikit-learn, PyTorch |
 | **PDF** | ReportLab |
@@ -65,8 +67,10 @@
 | **Templating** | Jinja2 (Flask `templates/`) |
 
 The system runs as **two separate processes**:
-1. The **Flask backend** (serves the web UI + all APIs) on `http://127.0.0.1:5000`.
-2. The **Electron secure browser** (optional, required only for secure-mode exams), which loads the backend over `http://localhost`.
+1. The **Flask backend** (web UI + all APIs) on `http://127.0.0.1:5000`.
+2. The **Electron secure browser** (optional; required only for secure-mode exams), which loads the backend over `http://localhost`.
+
+> On **Apple Silicon (M1/M2/M3)**, the face engine automatically uses the **CoreML execution provider** when available (see `face_engine.py`), which speeds up detection. It falls back to CPU otherwise.
 
 ---
 
@@ -76,71 +80,82 @@ The system runs as **two separate processes**:
 
 | Resource | Requirement |
 |----------|-------------|
-| OS | Windows 10 (64-bit) or Windows 11 |
-| CPU | Quad-core (the ML models are CPU-bound) |
+| OS | macOS 12 (Monterey) or newer |
+| Chip | Intel or Apple Silicon (M1/M2/M3) — both supported |
 | RAM | **8 GB** minimum |
 | Disk | **6 GB** free (Python deps + ML models can total ~4–5 GB) |
-| Camera | A working webcam (required for face verification & proctoring) |
-| Network | Internet access on first run (to download Python packages and the ~280 MB InsightFace model) |
+| Camera | Built-in FaceTime camera or external webcam |
+| Network | Internet on first run (downloads Python packages + ~280 MB InsightFace model) |
 
 ### Recommended
 
 - **16 GB RAM** — PyTorch, OpenCV, InsightFace, and YOLO loaded together are memory-hungry.
-- A modern multi-core CPU. (There is no CUDA/GPU requirement; inference runs on CPU via `CPUExecutionProvider`.)
-- SSD storage for faster model loading.
+- Apple Silicon for CoreML-accelerated face detection.
+- SSD storage (standard on modern Macs) for fast model loading.
 
 ---
 
 ## 4. Required Software & Dependencies
 
-Install the following **before** setting up the project.
+### 4.1 Xcode Command Line Tools
 
-### 4.1 Python 3.14 (64-bit)
+Required for compilers/headers used when building Python wheels.
 
-> The project's virtual environment was created with **Python 3.14.3**. Use Python **3.11+** at minimum; 3.14.x matches the pinned dependency versions exactly.
+```bash
+xcode-select --install
+```
 
-1. Download from <https://www.python.org/downloads/windows/>.
-2. Run the installer and **CHECK** the box **"Add python.exe to PATH"** on the first screen.
-3. Choose **"Customize installation"** → ensure **pip** and **"py launcher"** are selected.
-4. Verify in a new terminal:
-   ```powershell
-   python --version
-   pip --version
-   ```
+### 4.2 Homebrew
 
-### 4.2 Git for Windows
+The package manager for macOS. Install from <https://brew.sh>:
 
-- Download from <https://git-scm.com/download/win> and install with defaults.
-- Verify:
-  ```powershell
-  git --version
-  ```
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
-### 4.3 MySQL Server 8.x
+> On Apple Silicon, Homebrew installs to `/opt/homebrew`; on Intel, `/usr/local`. Follow the post-install instructions Homebrew prints to add it to your `PATH`.
 
-- Download the **MySQL Installer for Windows** from <https://dev.mysql.com/downloads/installer/>.
-- See [Section 7](#7-mysql-installation--database-setup) for full setup.
+### 4.3 Python 3.14
 
-### 4.4 Node.js 18+ LTS (only for the Secure Browser)
+> The project's virtual environment was created with **Python 3.14.3** (Homebrew: `python@3.14`). Use Python **3.11+** at minimum; 3.14.x matches the pinned dependency versions exactly.
 
-- Download from <https://nodejs.org/> (LTS) and install with defaults.
-- Verify:
-  ```powershell
-  node --version
-  npm --version
-  ```
+```bash
+brew install python@3.14
+python3 --version    # confirm 3.14.x (or 3.11+)
+```
 
-### 4.5 Microsoft C++ Build Tools (required)
+### 4.4 Git
 
-InsightFace and some ML wheels may need to compile native code on Windows.
+Usually present via Xcode CLT. If needed:
 
-- Install **"Build Tools for Visual Studio"** from <https://visualstudio.microsoft.com/visual-cpp-build-tools/>.
-- During install, select the **"Desktop development with C++"** workload.
-- This avoids `Microsoft Visual C++ 14.0 or greater is required` errors.
+```bash
+brew install git
+git --version
+```
 
-### 4.6 Nginx (optional — production reverse proxy only)
+### 4.5 MySQL 8.x
 
-- Download from <https://nginx.org/en/download.html>. See [Section 15](#15-build--production-deployment).
+```bash
+brew install mysql
+```
+
+See [Section 7](#7-mysql-installation--database-setup) for setup.
+
+### 4.6 Node.js 18+ LTS (only for the Secure Browser)
+
+```bash
+brew install node
+node --version
+npm --version
+```
+
+### 4.7 Nginx (optional — production reverse proxy only)
+
+```bash
+brew install nginx
+```
+
+See [Section 15](#15-build--production-deployment).
 
 ---
 
@@ -148,10 +163,8 @@ InsightFace and some ML wheels may need to compile native code on Windows.
 
 ### Option A — Git clone (recommended)
 
-Open **PowerShell** (or Git Bash) and run:
-
-```powershell
-cd C:\Projects
+```bash
+cd ~/Projects        # or any folder you like; create it with: mkdir -p ~/Projects
 git clone <YOUR_REPOSITORY_URL> exam-system
 cd exam-system
 ```
@@ -161,50 +174,44 @@ cd exam-system
 ### Option B — ZIP download
 
 1. On the repository page, click **Code → Download ZIP**.
-2. Extract to `C:\Projects\exam-system`.
-3. Open PowerShell in that folder.
+2. Extract it (e.g. to `~/Projects/exam-system`).
+3. Open Terminal in that folder.
 
 ### What you should see
 
 ```
-exam-system\
-├── backend\          # Flask app + ML engines + templates
-├── secure-browser\   # Electron secure exam browser
-├── logs\             # Violation logs (gitignored)
-├── oems_nginx.conf   # Sample Nginx config
+exam-system/
+├── backend/          # Flask app + ML engines + templates
+├── secure-browser/   # Electron secure exam browser
+├── logs/             # Violation logs (gitignored)
+├── oems_nginx.conf   # Sample Nginx config (macOS paths)
 └── .gitignore
 ```
 
-> **Note:** `backend\venv\`, `backend\.env`, `node_modules\`, model weight files (`*.pt`), and `logs\` are **gitignored**. You will recreate these locally during setup.
+> **Note:** `backend/venv/`, `backend/.env`, `node_modules/`, model weight files (`*.pt`), and `logs/` are **gitignored**. You recreate these locally during setup.
 
 ---
 
 ## 6. Python Virtual Environment & Backend Dependencies
 
-All backend commands run from the `backend\` folder.
+All backend commands run from the `backend/` folder.
 
-```powershell
-cd C:\Projects\exam-system\backend
+```bash
+cd ~/Projects/exam-system/backend
 ```
 
 ### 6.1 Create and activate a virtual environment
 
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+```bash
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-> If PowerShell blocks activation with *"running scripts is disabled on this system"*, run once:
-> ```powershell
-> Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-> ```
-> Then re-run the activation command. (Or use `venv\Scripts\activate.bat` from `cmd.exe`.)
-
-When active, your prompt shows `(venv)`.
+When active, your prompt shows `(venv)`. To deactivate later: `deactivate`.
 
 ### 6.2 Upgrade pip and install dependencies
 
-```powershell
+```bash
 python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 ```
@@ -220,37 +227,42 @@ This installs (pinned versions — see [requirements.txt](backend/requirements.t
 - **Face recognition:** `insightface==1.0.1`, `onnxruntime==1.26.0`
 - **AI evaluation:** `sentence-transformers==5.3.0`, `scikit-learn==1.8.0`, `torch==2.11.0`, `torchvision==0.26.0`
 
-> ⏳ **This step is large (several GB) and slow on first run** (PyTorch + OpenCV + ONNX). Be patient and ensure a stable connection.
+> ⏳ **This step is large (several GB) and slow on first run** (PyTorch + OpenCV + ONNX). Be patient and keep a stable connection.
+
+> 🍎 **Apple Silicon note:** PyTorch and ONNX Runtime install native `arm64` wheels automatically. The face engine prefers `CoreMLExecutionProvider` when present (`onnxruntime`'s CoreML backend), falling back to CPU.
 
 ### 6.3 ML model files (auto-downloaded)
 
-- **InsightFace `buffalo_l` (~280 MB)** — auto-downloads to `C:\Users\<you>\.insightface\models\` on the **first** face-verification request. The first request will be slow.
-- **YOLOv8 weights (`yolov8n.pt`)** — already shipped in `backend\yolov8n.pt`. If missing, Ultralytics auto-downloads it on first use.
+- **InsightFace `buffalo_l` (~280 MB)** — auto-downloads to `~/.insightface/models/` on the **first** face-verification request. That first request is slow.
+- **YOLOv8 weights (`yolov8n.pt`)** — already shipped in `backend/yolov8n.pt`. If missing, Ultralytics auto-downloads on first use.
 - **SBERT `all-MiniLM-L6-v2`** — auto-downloads via `sentence-transformers` on first AI evaluation.
 
 ---
 
 ## 7. MySQL Installation & Database Setup
 
-### 7.1 Install MySQL Server
+### 7.1 Start MySQL
 
-1. Run the **MySQL Installer**, choose **"Server only"** (or "Developer Default" to also get MySQL Workbench — recommended for beginners).
-2. Configure:
-   - **Authentication:** "Use Strong Password Encryption".
-   - Set a **root password** and **remember it** — you will put it in `.env`.
-   - Keep the default port **3306**.
-   - Configure MySQL as a **Windows Service** that starts automatically.
-3. Finish and verify the service is running (`services.msc` → "MySQL80" → Running).
+```bash
+brew services start mysql      # starts MySQL now and on login
+# (one-off, no auto-start: mysql.server start)
+```
+
+Secure the install and set a root password (recommended):
+
+```bash
+mysql_secure_installation
+```
+
+> Note the password you set — it goes in `.env` as `DB_PASS`.
 
 ### 7.2 Create the database
 
-The application connects to a database named **`exam_system`** (configurable via `DB_NAME`). Open **MySQL Workbench** or the MySQL command-line client:
+The app connects to a database named **`exam_system`** (configurable via `DB_NAME`):
 
-```powershell
+```bash
 mysql -u root -p
 ```
-
-Then:
 
 ```sql
 CREATE DATABASE exam_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -261,7 +273,7 @@ USE exam_system;
 
 > ⚠️ **Important:** The application does **not** auto-create the core tables — it expects them to already exist. (It only *adds* face-recognition columns to `students` automatically on first login.) If you have an existing database dump (`.sql` file), import that instead (see [Section 7.5](#75-importing-an-existing-database-dump)). Otherwise, create the schema below.
 
-Run the following SQL inside the `exam_system` database. This schema is reconstructed from the application's queries and matches all column names and types OEMS uses.
+Run this SQL inside the `exam_system` database. It's reconstructed from the app's queries and matches all column names/types OEMS uses.
 
 ```sql
 -- ============================================================
@@ -288,9 +300,12 @@ CREATE TABLE students (
     email         VARCHAR(150),
     password      VARCHAR(255) NOT NULL        -- Werkzeug PBKDF2 hash
     -- Face columns below are added AUTOMATICALLY by the app on first login:
-    -- face_embedding_v2    MEDIUMBLOB NULL
-    -- face_registered      TINYINT(1) NOT NULL DEFAULT 0
-    -- face_registered_at   DATETIME NULL
+    -- face_embedding_v2        MEDIUMBLOB NULL
+    -- face_registered          TINYINT(1) NOT NULL DEFAULT 0
+    -- face_registered_at       DATETIME NULL
+    -- face_reg_email_status    TINYINT(1) NOT NULL DEFAULT 0  -- confirmation-email guard
+    -- face_reg_email_attempts  INT NOT NULL DEFAULT 0
+    -- face_reg_email_sent_at   DATETIME NULL
 );
 
 -- Exams
@@ -363,7 +378,7 @@ CREATE TABLE exam_violations (
 );
 ```
 
-> The three face columns (`face_embedding_v2`, `face_registered`, `face_registered_at`) are added to `students` **automatically** by `ensure_student_face_schema()` the first time a student logs in. You do **not** need to add them manually — but it is harmless to do so.
+> The face columns (`face_embedding_v2`, `face_registered`, `face_registered_at`, plus the confirmation-email tracking columns `face_reg_email_status`, `face_reg_email_attempts`, `face_reg_email_sent_at`) are added to `students` **automatically** by `ensure_student_face_schema()` the first time a student logs in. You do **not** need to add them manually.
 
 ### 7.4 Verify the schema
 
@@ -377,27 +392,27 @@ SHOW TABLES;
 
 If you were given a `.sql` dump (e.g. `exam_system.sql`):
 
-```powershell
-mysql -u root -p exam_system < C:\path\to\exam_system.sql
+```bash
+mysql -u root -p exam_system < ~/path/to/exam_system.sql
 ```
 
-This restores all tables and existing data in one step (skip the manual schema creation above).
+This restores all tables and data in one step (skip the manual schema creation).
 
 ---
 
 ## 8. Environment Variable Setup (.env)
 
-The backend reads configuration from `backend\.env` using `python-dotenv`. A template is provided at [backend/.env.example](backend/.env.example).
+The backend reads configuration from `backend/.env` via `python-dotenv`. A template is at [backend/.env.example](backend/.env.example).
 
 ### 8.1 Create your `.env`
 
-From `backend\`:
+From `backend/`:
 
-```powershell
-copy .env.example .env
+```bash
+cp .env.example .env
 ```
 
-Then open `backend\.env` in a text editor and fill in real values:
+Then edit `backend/.env`:
 
 ```ini
 # Flask session signing key (REQUIRED — app refuses to start without it)
@@ -409,9 +424,16 @@ DB_USER=root
 DB_PASS=your-mysql-root-password
 DB_NAME=exam_system
 
-# Gmail SMTP for welcome / OTP emails (REQUIRED — app refuses to start without these)
+# Gmail SMTP for welcome / OTP / face-registration emails (REQUIRED — app refuses to start without these)
 OEMS_EMAIL=your-email@gmail.com
 OEMS_EMAIL_PASSWORD=your-16-char-google-app-password
+
+# Email service (OPTIONAL — code defaults shown; uncomment to override)
+# OEMS_SMTP_SERVER=smtp.gmail.com
+# OEMS_SMTP_PORT=587
+# OEMS_SUPPORT_EMAIL=support@your-domain.com   # footer "need help?" address; defaults to OEMS_EMAIL
+# OEMS_EMAIL_MAX_RETRIES=3                      # transactional send attempts before giving up
+# OEMS_EMAIL_RETRY_BACKOFF=5                    # base seconds between retries (linear)
 
 # Misc
 GRPC_DNS_RESOLVER=native
@@ -424,7 +446,7 @@ PLAGIARISM_THRESHOLD=70
 
 With the venv active:
 
-```powershell
+```bash
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
@@ -445,7 +467,7 @@ Copy the output into `SECRET_KEY`.
 
 ### 8.4 Optional face-recognition tuning
 
-These have safe defaults in code and only need to be set to override behaviour (uncomment in `.env`):
+Safe defaults exist in code; override only if needed (uncomment in `.env`):
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -457,27 +479,41 @@ These have safe defaults in code and only need to be set to override behaviour (
 | `FACE_MODEL_PACK` | `buffalo_l` | InsightFace model pack. |
 | `FACE_AUTH_WINDOW_SECONDS` | `600` | How long the face step stays valid after the password step. |
 
-> 🔒 **Never commit `.env`.** It is gitignored. It contains your DB password and email app password.
+### 8.5 Optional email service tuning
+
+Safe defaults exist in code; override only if needed:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OEMS_SMTP_SERVER` | `smtp.gmail.com` | SMTP relay host. |
+| `OEMS_SMTP_PORT` | `587` | SMTP relay port (STARTTLS). |
+| `OEMS_SUPPORT_EMAIL` | = `OEMS_EMAIL` | Support address shown in transactional email footers. |
+| `OEMS_EMAIL_MAX_RETRIES` | `3` | Send attempts before giving up (face-registration confirmation, etc.). |
+| `OEMS_EMAIL_RETRY_BACKOFF` | `5` | Base seconds between retries (linear backoff). |
+
+> 🔒 **Never commit `.env`.** It is gitignored and holds your DB password and email app password.
 
 ---
 
 ## 9. Creating the First Admin Account
 
-There is **no self-service admin signup** and **no automatic admin seeding**. You must insert the first admin directly into the database with a properly **hashed** password (Werkzeug PBKDF2 — the app verifies with `check_password_hash`).
+There is **no admin signup** and **no automatic admin seeding**. Insert the first admin directly into the database with a properly **hashed** password (Werkzeug PBKDF2 — the app verifies with `check_password_hash`).
 
 ### 9.1 Generate a password hash
 
-With the venv active, from `backend\`:
+With the venv active, from `backend/`:
 
-```powershell
+```bash
 python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('YourAdminPassword123'))"
 ```
 
-Copy the full hash string it prints.
+Copy the full hash it prints.
 
 ### 9.2 Insert the admin row
 
-In MySQL:
+```bash
+mysql -u root -p
+```
 
 ```sql
 USE exam_system;
@@ -486,9 +522,9 @@ VALUES ('admin01', 'Head Proctor', 'PASTE_THE_HASH_HERE', 'ALL');
 ```
 
 - `admin_id` — the login ID (e.g. `admin01`).
-- `branch` — use `'ALL'` for a super-admin who sees every branch, or a specific branch like `'SCSE'` / `'SOM'` to scope an admin to one branch.
+- `branch` — use `'ALL'` for a super-admin who sees every branch, or a specific branch (`'SCSE'` / `'SOM'`) to scope the admin.
 
-You can now log in at **`/admin_login`** with `admin_id` = `admin01` and the plaintext password you hashed.
+Log in at **`/admin_login`** with `admin_id` = `admin01` and the plaintext password you hashed.
 
 > Students are created **from the admin portal** ("Add Student", single or bulk CSV) — their passwords are auto-generated, hashed, and emailed. You do not insert students by hand.
 
@@ -496,7 +532,7 @@ You can now log in at **`/admin_login`** with `admin_id` = `admin01` and the pla
 
 ## 10. Face Verification & Camera Permissions
 
-Face verification is **mandatory on every student login** and AI proctoring is optional per-exam. Both require camera access.
+Face verification is **mandatory on every student login**; AI proctoring is optional per-exam. Both require camera access.
 
 ### 10.1 How it works
 
@@ -507,102 +543,113 @@ Face verification is **mandatory on every student login** and AI proctoring is o
 5. **Subsequent logins** → the student is **verified** (4 frames) against the stored embedding, with an active-liveness challenge (blink or head-turn).
 6. On success, the full student session is granted.
 
-### 10.2 Camera permissions on Windows
+### 10.2 Camera permissions on macOS
 
-- **Browser:** When prompted, click **Allow** for camera access. (In Chrome/Edge, check the camera icon in the address bar if you previously denied it.)
-- **Windows privacy settings:** Go to **Settings → Privacy & security → Camera** and ensure:
-  - **"Camera access"** is **On**.
-  - **"Let apps access your camera"** is **On**.
-  - **"Let desktop apps access your camera"** is **On** (required for the Electron secure browser).
-- Close any other app (Zoom, Teams, OBS) that may be holding the camera.
+macOS gates camera access at the OS level — **per application**.
+
+- **Browser (Chrome/Safari/Edge):** When prompted, click **Allow**. To change later: **System Settings → Privacy & Security → Camera** → enable your browser.
+- **Electron secure browser:** The first time it accesses the camera, macOS prompts to allow **camera access for the app**. Approve it. If you missed the prompt: **System Settings → Privacy & Security → Camera** → enable the app (it may appear as "Electron" during development).
+- Close any other app holding the camera (Zoom, Teams, Photo Booth, OBS).
+
+> If the camera light is on but frames are black, another app is using it, or the app was denied in Privacy settings — toggle it off/on there and relaunch.
 
 ### 10.3 First-run model download
 
-The first face request downloads the **InsightFace `buffalo_l`** pack (~280 MB) to `C:\Users\<you>\.insightface\models\`. This request will be slow and **requires internet**. Subsequent requests are fast and offline.
+The first face request downloads the **InsightFace `buffalo_l`** pack (~280 MB) to `~/.insightface/models/`. This is slow and **requires internet**; later requests are fast and offline.
+
+> 🍎 On Apple Silicon, `onnxruntime` uses **CoreML** for detection when available (auto-detected in `face_engine.py`), giving noticeably faster face detection.
 
 ### 10.4 Tips for reliable verification
 
 - Good, even lighting on the face; avoid strong backlight.
 - One person only in frame, centred in the circle, not too far.
-- Hold still during capture (motion blur is rejected by a sharpness check).
+- Hold still during capture (a sharpness check rejects motion blur).
 
 ---
 
 ## 11. Running the Backend (Flask)
 
-From `backend\` with the venv active and `.env` configured:
+From `backend/` with the venv active and `.env` configured:
 
-```powershell
-cd C:\Projects\exam-system\backend
-.\venv\Scripts\Activate.ps1
-python app.py
+```bash
+cd ~/Projects/exam-system/backend
+source venv/bin/activate
+python oems.py
 ```
 
-You should see startup logs like:
+You should see:
 
 ```
 [OEMS] SBERT model: all-MiniLM-L6-v2
  * Running on http://127.0.0.1:5000
 ```
 
-The app binds to **`127.0.0.1:5000`** with `debug=False` (see the `if __name__ == "__main__"` block in [backend/app.py](backend/app.py)).
+The app binds to **`127.0.0.1:5000`** with `debug=False` (see the `if __name__ == "__main__"` block in [backend/oems.py](backend/oems.py)).
 
-> **First startup is slow** because PyTorch, OpenCV, ONNX Runtime, and the SBERT model initialise. Wait for the "Running on" line before opening a browser.
+> **First startup is slow** while PyTorch, OpenCV, ONNX Runtime, and SBERT initialise. Wait for the "Running on" line before opening a browser.
 
-To stop the server: press **Ctrl + C** in the terminal.
+Stop the server with **Ctrl + C**.
 
 ---
 
 ## 12. Running the Secure Browser (Electron)
 
-The Electron **secure exam browser** is only needed for exams whose `browser_mode` is `secure_any` or `secure_campus`. For `any`-mode exams, students can use a normal browser.
+The Electron **secure exam browser** is needed only for exams whose `browser_mode` is `secure_any` or `secure_campus`. For `any`-mode exams, a normal browser works.
 
 ### 12.1 Install Node dependencies
 
-In a **second** terminal:
+In a **second** Terminal tab:
 
-```powershell
-cd C:\Projects\exam-system\secure-browser
+```bash
+cd ~/Projects/exam-system/secure-browser
 npm install
 ```
 
-This installs `electron@^28` and `axios` (see [secure-browser/package.json](secure-browser/package.json)).
+Installs `electron@^28` and `axios` (see [secure-browser/package.json](secure-browser/package.json)).
 
 ### 12.2 Start the secure browser
 
-> ⚠️ Make sure the **Flask backend is already running** first — the browser loads `http://localhost`.
+> ⚠️ Start the **Flask backend first** — the browser loads `http://localhost`.
 
-```powershell
+```bash
 npm start
 ```
 
 This launches a **full-screen kiosk** Electron window that:
 
 - Loads a splash screen, then your OEMS site at `http://localhost`.
-- Sends a `X-OEMS-Secure-Browser: ElectronV1` header so the backend recognises it as the secure browser.
+- Sends an `X-OEMS-Secure-Browser: ElectronV1` header so the backend recognises it.
 - Blocks copy/paste/cut, right-click, dev tools, navigation to non-local URLs, new windows, and force-quit.
-- Shows an **"← Exit"** button on non-exam pages (hidden during an exam) that requires confirmation.
+- Shows an **"← Exit"** button on non-exam pages (hidden during an exam) requiring confirmation.
 
-> The browser points at `http://localhost` (port 80). If you run Flask directly on port 5000 **without** Nginx, either:
+> The browser points at `http://localhost` (port 80). If you run Flask on port 5000 **without** Nginx, either:
 > - put Nginx in front (see [Section 15](#15-build--production-deployment)) so `http://localhost` proxies to Flask, **or**
 > - change `CONFIG.baseUrl` in [secure-browser/main.js](secure-browser/main.js) to `http://localhost:5000` for local testing.
 
-### 12.3 Build a distributable (optional)
+### 12.3 Build a macOS app (`.app` / `.dmg`)
 
-The build script targets macOS only (`electron-builder --mac`). To build a **Windows** installer, install `electron-builder` and target Windows:
+The `build` script is already configured for macOS:
 
-```powershell
-npm install --save-dev electron-builder
-npx electron-builder --win
+```bash
+npm run build      # runs: electron-builder --mac
 ```
 
-The output appears in `secure-browser\dist\`.
+You'll need `electron-builder` installed:
+
+```bash
+npm install --save-dev electron-builder
+npm run build
+```
+
+Output appears in `secure-browser/dist/` (a `.app` bundle and/or `.dmg`).
+
+> 🍎 **Code signing & notarization:** An unsigned `.app` will be blocked by Gatekeeper on other Macs. For distribution, sign and notarize with an Apple Developer ID (configure `electron-builder` accordingly). For your own machine, right-click the app → **Open** to bypass Gatekeeper once.
 
 ---
 
 ## 13. Default URLs & Access Instructions
 
-With the backend running on `http://127.0.0.1:5000` (or `http://localhost` behind Nginx):
+With the backend on `http://127.0.0.1:5000` (or `http://localhost` behind Nginx):
 
 | URL | Who | Purpose |
 |-----|-----|---------|
@@ -632,7 +679,7 @@ With the backend running on `http://127.0.0.1:5000` (or `http://localhost` behin
 
 ## 14. Email / SMTP Configuration
 
-OEMS sends **welcome emails** (with student credentials) and **OTP verification** emails via **Gmail SMTP** (`smtp.gmail.com:587`, STARTTLS). See `EMAIL_CONFIG` in [backend/app.py](backend/app.py).
+OEMS sends **welcome emails** (with student credentials), **OTP verification**, a **one-time face-registration confirmation** (sent automatically after a student's first face enrolment is stored and verified), and exam/result notifications via **Gmail SMTP** (`smtp.gmail.com:587`, STARTTLS). See `EMAIL_CONFIG` and the `EmailService` class in [backend/oems.py](backend/oems.py).
 
 ### 14.1 Create a Gmail App Password
 
@@ -657,51 +704,59 @@ OEMS sends **welcome emails** (with student credentials) and **OTP verification*
 
 ## 15. Build & Production Deployment
 
-> Flask's built-in server (`app.run`) is for development. For production on Windows, run behind a WSGI server and a reverse proxy.
+> Flask's built-in server (`app.run`) is for development. For production, run behind a WSGI server and a reverse proxy.
 
-### 15.1 Use a production WSGI server (Waitress)
+### 15.1 Use a production WSGI server (Gunicorn)
 
-Flask's dev server is single-threaded and not hardened. On Windows, **Waitress** is the simplest production server:
+On macOS/Unix, **Gunicorn** is a solid choice:
 
-```powershell
-pip install waitress
-waitress-serve --host=127.0.0.1 --port=5000 app:app
+```bash
+pip install gunicorn
+gunicorn --workers 3 --bind 127.0.0.1:5000 oems:app
 ```
 
-(For `app:app`, ensure you run this from `backend\` so Python imports `app.py`.)
+(Run from `backend/` so Python imports `oems.py`.)
+
+> ⚠️ The ML models (PyTorch/InsightFace/YOLO) load **per worker** and use a lot of RAM. Start with **1–3 workers** and watch memory. Consider `--timeout 120` for long evaluation requests.
 
 ### 15.2 Put Nginx in front (recommended)
 
-A sample config is provided at [oems_nginx.conf](oems_nginx.conf). It:
+A sample config is provided at [oems_nginx.conf](oems_nginx.conf) — it was written **for macOS**:
 
 - Listens on **port 80** and proxies all requests to `http://127.0.0.1:5000`.
 - Serves `/static/` directly (faster).
 - Sets `client_max_body_size 10M` (camera frame uploads).
-- Forwards `X-Real-IP` / `X-Forwarded-For` so campus-IP gating works correctly.
+- Forwards `X-Real-IP` / `X-Forwarded-For` so campus-IP gating works.
 
-On Windows:
-1. Download Nginx for Windows and extract to `C:\nginx`.
-2. Copy `oems_nginx.conf` into `C:\nginx\conf\` (or `include` it from `nginx.conf`).
-3. **Edit the paths** in the config:
-   - Change the `location /static/` `alias` to your real path, e.g. `C:/Projects/exam-system/backend/static/`.
+Setup:
+
+1. Find your Nginx servers directory:
+   - **Apple Silicon:** `/opt/homebrew/etc/nginx/servers/`
+   - **Intel:** `/usr/local/etc/nginx/servers/`
+2. Copy the config there as `oems.conf`:
+   ```bash
+   # Apple Silicon example
+   cp oems_nginx.conf /opt/homebrew/etc/nginx/servers/oems.conf
+   ```
+3. **Edit the paths** in that file:
+   - Update the `location /static/` `alias` to your real path, e.g. `/Users/<you>/Projects/exam-system/backend/static/`.
    - Fix the `favicon.ico` `alias` placeholder (`/YOUR_PROJECT_PATH/...`).
-4. Start Nginx:
-   ```powershell
-   cd C:\nginx
-   .\nginx.exe
+4. Start/reload Nginx:
+   ```bash
+   brew services start nginx     # or: nginx -s reload
    ```
 5. Now `http://localhost` proxies to Flask, and the Electron secure browser (which loads `http://localhost`) works without code changes.
 
-> ⚠️ The committed `oems_nginx.conf` contains macOS/absolute paths and a hardcoded user path — **always review and adjust paths** before using it on Windows. (Note: this file is gitignored in fresh clones because it may contain server/IP details; the sample in the repo is for reference.)
+> ⚠️ The committed `oems_nginx.conf` contains an example absolute path under `/Users/...`. **Always review and adjust paths** for your machine. (In fresh clones this file is gitignored because it may contain server/IP details; the repo copy is a reference.)
 
 ### 15.3 Production hardening checklist
 
 - Generate a **fresh** `SECRET_KEY`; never reuse the example.
 - Use a **dedicated, least-privilege MySQL user** (not `root`) for `DB_USER`/`DB_PASS`.
-- Run behind **HTTPS** (terminate TLS at Nginx with a real certificate).
+- Serve over **HTTPS** (terminate TLS at Nginx with a real certificate).
 - Keep `debug=False` (already the default).
 - Restrict camera-frame upload size at the proxy (already `10M`).
-- Run Flask/Waitress as a Windows service (e.g. via NSSM) so it restarts on reboot.
+- Use `brew services` (launchd) so Gunicorn/Nginx/MySQL restart on reboot.
 
 ---
 
@@ -710,8 +765,9 @@ On Windows:
 ```
 exam-system/
 ├── backend/
-│   ├── app.py                 # Main Flask app: routes, DB, proctoring, AI eval, email, PDF
+│   ├── oems.py                 # Main Flask app: routes, DB, proctoring, AI eval, email, PDF
 │   ├── face_engine.py         # ArcFace (InsightFace) face detection + recognition engine
+│   ├── proctor_engine.py      # AI proctoring detectors (face count, gaze, YOLOv8)
 │   ├── requirements.txt       # Pinned Python dependencies
 │   ├── .env.example           # Environment template (copy to .env)
 │   ├── .env                   # YOUR secrets (gitignored — create locally)
@@ -741,11 +797,11 @@ exam-system/
 │   ├── main.js                # Electron main process (kiosk, shortcut blocking, IPC)
 │   ├── preload.js             # Secure bridge (contextIsolation) to the page
 │   ├── splash.html            # Splash screen
-│   ├── package.json           # Electron + axios; start/build scripts
+│   ├── package.json           # Electron + axios; start/build (--mac) scripts
 │   └── node_modules/          # (gitignored — run npm install)
 ├── logs/
 │   └── oems_violations.log    # Secure-browser violation log (gitignored)
-├── oems_nginx.conf            # Sample Nginx reverse-proxy config
+├── oems_nginx.conf            # Sample Nginx reverse-proxy config (macOS paths)
 └── .gitignore
 ```
 
@@ -762,23 +818,24 @@ exam-system/
 | `mysql.connector ... Access denied for user 'root'` | Wrong `DB_PASS` | Fix the MySQL password in `.env`. |
 | `Unknown database 'exam_system'` | DB not created | Run the `CREATE DATABASE` step ([7.2](#72-create-the-database)). |
 | `Table 'exam_system.admins' doesn't exist` | Schema not created | Run the schema SQL ([7.3](#73-create-the-schema)). |
-| `Can't connect to MySQL server` | MySQL service stopped | Start "MySQL80" in `services.msc`. |
+| `Can't connect to MySQL server` | MySQL not running | `brew services start mysql`. |
 
 ### Camera / face issues
 
 | Symptom | Fix |
 |---------|-----|
-| "Face engine unavailable on server." | InsightFace failed to load — check the backend console for the load error; confirm the model downloaded and you have RAM free. |
-| Camera not detected in browser | Allow camera permission; check Windows Camera privacy settings ([10.2](#102-camera-permissions-on-windows)); close other apps using the camera. |
+| "Face engine unavailable on server." | InsightFace failed to load — check the backend console for the load error; confirm the model downloaded and RAM is available. |
+| Camera not detected / black frames | Allow camera in **System Settings → Privacy & Security → Camera** for your browser/Electron; close other apps using the camera. |
 | "Bring your face into the circle" / "Move closer" | Improve lighting, centre and approach the camera. |
-| First face login extremely slow | Normal — `buffalo_l` (~280 MB) is downloading. Wait; requires internet. |
+| First face login extremely slow | Normal — `buffalo_l` (~280 MB) is downloading; requires internet. |
 
 ### Secure browser issues
 
 | Symptom | Fix |
 |---------|-----|
-| Electron loads a blank/error page | Backend not running, or `http://localhost` not served. Start Flask + Nginx, or set `CONFIG.baseUrl` to `http://localhost:5000` in `main.js`. |
-| "Secure browser required" page shown | The exam's `browser_mode` is `secure_any`/`secure_campus`; you must use the Electron browser, not Chrome. |
+| Electron loads a blank/error page | Backend not running or `http://localhost` not served. Start Flask + Nginx, or set `CONFIG.baseUrl` to `http://localhost:5000` in `main.js`. |
+| macOS won't open the built `.app` | Gatekeeper — right-click → **Open** once, or sign/notarize for distribution. |
+| "Secure browser required" page | The exam's `browser_mode` is `secure_any`/`secure_campus`; use the Electron browser, not Safari/Chrome. |
 | Campus-only block | The exam is `secure_campus` and your IP prefix isn't in `CAMPUS_IP_RANGES`. Adjust `.env` or connect to the campus network. |
 
 ---
@@ -787,16 +844,17 @@ exam-system/
 
 | Error | Likely Cause | Fix |
 |-------|--------------|-----|
-| `Microsoft Visual C++ 14.0 or greater is required` | Missing C++ build tools | Install Visual C++ Build Tools ([4.5](#45-microsoft-c-build-tools-required)). |
-| `running scripts is disabled on this system` | PowerShell execution policy | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. |
-| `pip` install of `torch`/`insightface` fails | Network timeout / old pip | Upgrade pip; retry; ensure stable internet. |
-| `ModuleNotFoundError: No module named 'flask'` | venv not activated | Activate venv before running `app.py`. |
-| `Address already in use` / port 5000 busy | Another process on 5000 | Stop the other process or change the port in `app.py`. |
+| `xcrun: error: invalid active developer path` | Xcode CLT missing/broken | `xcode-select --install`. |
+| `command not found: brew` | Homebrew not on PATH | Follow Homebrew's post-install `PATH` instructions. |
+| `pip` install of `torch`/`insightface` fails | Network timeout / old pip | Upgrade pip; retry on stable internet. |
+| `ModuleNotFoundError: No module named 'flask'` | venv not activated | `source venv/bin/activate` before `python oems.py`. |
+| `Address already in use` / port 5000 busy | Another process on 5000 (e.g. macOS AirPlay Receiver also uses 5000!) | Stop the other process, or disable **System Settings → General → AirDrop & Handoff → AirPlay Receiver**, or change the port in `oems.py`. |
 | `smtplib ... 535 Authentication failed` | Using Gmail password, not App Password | Generate a Gmail **App Password** ([14.1](#141-create-a-gmail-app-password)). |
-| Welcome/OTP email never arrives | Wrong email creds / 2FA off | Verify App Password; check spam; confirm 2-Step Verification on the sender account. |
-| `numpy`/`opencv` import DLL error | Corrupt partial install | `pip uninstall` then `pip install -r requirements.txt` again. |
-| Bulk CSV student import fails | Wrong CSV headers | Match the headers expected by the Add Student page (name, admission_no, program, branch, semester, email). |
-| "You have already attempted this exam" | A `results` row already exists for that student+exam | Expected — one attempt per exam. Delete the result row only if intentionally allowing a retake. |
+| Welcome/OTP email never arrives | Wrong creds / 2FA off | Verify App Password; check spam; confirm 2-Step Verification on the sender account. |
+| `Library not loaded` / dyld errors on import | Mixed arch (Rosetta vs native) | Use a native `arm64` Python on Apple Silicon; recreate the venv. |
+| "You have already attempted this exam" | A `results` row exists for that student+exam | Expected — one attempt per exam. Remove the result row only to intentionally allow a retake. |
+
+> 🍎 **macOS port-5000 gotcha:** macOS's **AirPlay Receiver** also listens on port 5000. If Flask reports the port busy, disable AirPlay Receiver in System Settings, or change the Flask port (and update Nginx/Electron `baseUrl` to match).
 
 ---
 
@@ -808,8 +866,8 @@ A: Only for exams set to `secure_any` or `secure_campus`. Exams set to `any` wor
 **Q: Where is the face data stored?**
 A: As a raw float32 ArcFace embedding (2048 bytes) in `students.face_embedding_v2` (a MySQL BLOB). No face images are stored.
 
-**Q: Is a GPU required?**
-A: No. All ML runs on CPU (ONNX `CPUExecutionProvider`, CPU PyTorch). A GPU is not used on Windows by default.
+**Q: Does it use the Apple Neural Engine / GPU?**
+A: Face detection uses **CoreML** (`CoreMLExecutionProvider`) on Apple Silicon when available, falling back to CPU. PyTorch/SBERT run on CPU by default.
 
 **Q: How do I add the very first admin?**
 A: Insert one row into the `admins` table with a Werkzeug-hashed password ([Section 9](#9-creating-the-first-admin-account)). There is no signup page.
@@ -818,13 +876,13 @@ A: Insert one row into the `admins` table with a Werkzeug-hashed password ([Sect
 A: Auto-generated when an admin adds a student, hashed with Werkzeug, and emailed via the welcome email. Admins can resend credentials.
 
 **Q: How are theory answers graded?**
-A: With SBERT (`all-MiniLM-L6-v2`) semantic-similarity scoring, plus plagiarism detection (threshold `PLAGIARISM_THRESHOLD`, default 70%). Admins can trigger AI evaluation and release results.
+A: With SBERT (`all-MiniLM-L6-v2`) semantic-similarity scoring, plus plagiarism detection (threshold `PLAGIARISM_THRESHOLD`, default 70%). Admins trigger AI evaluation and release results.
 
 **Q: What does `branch = 'ALL'` mean for an admin?**
 A: A super-admin who can see and manage all branches. A specific branch (e.g. `SCSE`) scopes the admin to that branch only.
 
 **Q: Can I change the port?**
-A: Yes — edit `app.run(host='127.0.0.1', port=5000, ...)` at the bottom of `app.py`, and update the Electron `baseUrl` / Nginx `proxy_pass` accordingly.
+A: Yes — edit `app.run(host='127.0.0.1', port=5000, ...)` at the bottom of `oems.py`, and update the Electron `baseUrl` / Nginx `proxy_pass` accordingly. (Useful to avoid the AirPlay port-5000 clash.)
 
 **Q: First request after start is slow — is something wrong?**
 A: No. ML models initialise lazily on first use (and `buffalo_l` may download). It's fast afterward.
@@ -834,15 +892,15 @@ A: No. ML models initialise lazily on first use (and `buffalo_l` may download). 
 ## 20. Security Recommendations
 
 1. **Never commit `.env`, `*.sql`, `*.pem`, `*.key`, logs, or model/biometric files** — `.gitignore` already excludes them; keep it that way.
-2. **Rotate the `SECRET_KEY`** if it was ever exposed; generate a unique one per deployment.
+2. **Rotate the `SECRET_KEY`** if it was ever exposed; use a unique one per deployment.
 3. **Use a dedicated MySQL user** with only the needed privileges on `exam_system` — not `root` — in production.
-4. **Use a Gmail App Password**, and store it only in `.env`; never in code or chat.
+4. **Use a Gmail App Password**, stored only in `.env`; never in code.
 5. **Serve over HTTPS** in production (TLS at Nginx) so credentials and camera frames aren't sent in clear text.
-6. **Protect the violation logs** (`logs/oems_violations.log`) — they may contain student/violation data; they are gitignored for a reason.
+6. **Protect the violation logs** (`logs/oems_violations.log`) — they may contain student/violation data and are gitignored for a reason.
 7. **Keep dependencies patched** — periodically review `requirements.txt` and Electron for security updates.
-8. **Restrict the admin portal** at the network level (firewall / campus-only) where possible.
+8. **Sign & notarize** the distributed `.app` so students can trust and run it without Gatekeeper workarounds.
 9. **Back up the database** regularly (it holds results, students, and face embeddings).
-10. Run the secure browser in **kiosk mode on managed machines** for high-stakes exams; the browser alone is not a substitute for a proctor.
+10. Use the secure browser **on managed machines** for high-stakes exams; it complements, but does not replace, a live proctor.
 
 ---
 
@@ -850,16 +908,16 @@ A: No. ML models initialise lazily on first use (and `buffalo_l` may download). 
 
 ### Pull the latest code
 
-```powershell
-cd C:\Projects\exam-system
+```bash
+cd ~/Projects/exam-system
 git pull
 ```
 
 ### Update backend dependencies
 
-```powershell
+```bash
 cd backend
-.\venv\Scripts\Activate.ps1
+source venv/bin/activate
 pip install -r requirements.txt --upgrade
 ```
 
@@ -867,26 +925,34 @@ pip install -r requirements.txt --upgrade
 
 ### Update the secure browser
 
-```powershell
+```bash
 cd secure-browser
 npm install
 ```
 
 ### Database migrations
 
-- The app **auto-adds** the face columns to `students` on first login (no action needed).
-- For any other schema change, take a backup first:
-  ```powershell
+- The app **auto-adds** face columns to `students` on first login (no action needed).
+- For any other schema change, back up first:
+  ```bash
   mysqldump -u root -p exam_system > exam_system_backup.sql
   ```
 
+### Manage services (Homebrew)
+
+```bash
+brew services list                 # see MySQL/Nginx status
+brew services restart mysql
+brew services restart nginx
+```
+
 ### Log rotation
 
-- `logs/oems_violations.log` grows over time. Archive/rotate it periodically and keep backups secure.
+- `logs/oems_violations.log` grows over time. Archive/rotate periodically and keep backups secure.
 
 ### Refresh ML models
 
-- To force a re-download of the InsightFace model, delete `C:\Users\<you>\.insightface\models\` and restart.
+- To force a re-download of the InsightFace model, delete `~/.insightface/models/` and restart.
 
 ---
 

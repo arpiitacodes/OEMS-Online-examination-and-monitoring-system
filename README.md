@@ -1,2 +1,17 @@
-# OEMS-Online-examination-and-monitoring-system
-A web-based online examination and monitoring system built using Flask, MySQL, HTML, CSS, JavaScript and AI based proctoring features.
+# OEMS - Online Examination and Monitoring System
+
+## Features
+- Online examinations
+- AI-based proctoring
+- Student and admin dashboard
+- Result generation
+- Secure exam environment
+
+## Tech Stack
+- Flask
+- MySQL
+- HTML
+- CSS
+- JavaScript
+- OpenCV
+- Electron.js
